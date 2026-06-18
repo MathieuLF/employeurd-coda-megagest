@@ -1,0 +1,14 @@
+[project]
+name = "employeurd-coda-megagest"
+version = "0.1.0"
+description = "Convertisseur de fichiers de paie vers un format d'import comptable."
+requires-python = ">=3.11"
+
+[project.scripts]
+payroll-mnd-converter = "payroll_mnd_converter.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,35 @@
+{
+  "input": {
+    "delimiter": "auto",
+    "encoding": "utf-8-sig"
+  },
+  "output": {
+    "encoding": "cp1252",
+    "line_ending": "\r\n"
+  },
+  "columns": {
+    "entry_date": "Date",
+    "journal": "Journal",
+    "account": "Compte",
+    "description": "Description",
+    "reference": "Reference",
+    "debit": "Debit",
+    "credit": "Credit"
+  },
+  "validation": {
+    "require_balanced": true
+  },
+  "formats": {
+    "input_date": "%Y-%m-%d",
+    "output_date": "%Y%m%d"
+  },
+  "fields": [
+    { "name": "journal", "source": "journal", "width": 2, "align": "left" },
+    { "name": "entry_date", "source": "entry_date", "format": "date", "width": 8, "align": "right" },
+    { "name": "account", "source": "account", "width": 12, "align": "left" },
+    { "name": "reference", "source": "reference", "width": 12, "align": "left" },
+    { "name": "description", "source": "description", "width": 40, "align": "left" },
+    { "name": "debit", "source": "debit", "format": "amount_cents", "width": 12, "align": "right", "pad": "0" },
+    { "name": "credit", "source": "credit", "format": "amount_cents", "width": 12, "align": "right", "pad": "0" }
+  ]
+}
