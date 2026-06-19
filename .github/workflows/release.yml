@@ -1,0 +1,65 @@
+name: Brouillon de mise en ligne GitHub
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Tag à publier, par exemple v0.1.0"
+        required: true
+      version:
+        description: "Version sans le préfixe v, par exemple 0.1.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  draft-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Déterminer la version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $tag = "${{ inputs.tag_name }}"
+            $version = "${{ inputs.version }}"
+          } else {
+            $tag = "${{ github.ref_name }}"
+            $version = $tag.TrimStart("v")
+          }
+          "TAG_NAME=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Installer les dépendances de compilation
+        run: python -m pip install --upgrade pip ".[build]"
+
+      - name: Préparer les fichiers de mise en ligne
+        shell: pwsh
+        run: .\scripts\release.ps1 -Version $env:RELEASE_VERSION
+
+      - name: Créer la mise en ligne GitHub en brouillon
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:TAG_NAME `
+            --draft `
+            --title "EmployeurD-MegaGest v$env:RELEASE_VERSION" `
+            --notes-file "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.release-notes.md" `
+            "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.exe" `
+            "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.exe.sha256" `
+            "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.zip" `
+            "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.sbom.json" `
+            "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.security.md" `
+            "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.virustotal.md"

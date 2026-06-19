@@ -1,0 +1,25 @@
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+  categories:
+    - title: Changements importants
+      labels:
+        - breaking
+        - security
+    - title: Ajouts
+      labels:
+        - enhancement
+        - feature
+    - title: Corrections
+      labels:
+        - bug
+        - fix
+    - title: Documentation et distribution
+      labels:
+        - documentation
+        - release
+        - packaging
+    - title: Autres changements
+      labels:
+        - "*"

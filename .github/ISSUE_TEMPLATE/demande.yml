@@ -1,0 +1,41 @@
+name: Demande simple
+description: Signaler un problème ou proposer une amélioration.
+title: "[Demande] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci! Ne joignez jamais de fichier de paie réel, de rapport SPD réel, de MND réel, de secret ou de capture contenant des données sensibles.
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      options:
+        - Problème
+        - Amélioration
+        - Question
+    validations:
+      required: true
+  - type: textarea
+    id: resume
+    attributes:
+      label: Résumé
+      description: Expliquez simplement ce qui arrive ou ce que vous souhaitez.
+      placeholder: Exemple synthétique, message affiché, étape concernée...
+    validations:
+      required: true
+  - type: textarea
+    id: contexte
+    attributes:
+      label: Contexte utile
+      description: Version, écran ou action utilisée, sans données réelles.
+      placeholder: Version 0.1.0, écran Support, étape Vérifier la paie...
+    validations:
+      required: false
+  - type: checkboxes
+    id: securite
+    attributes:
+      label: Vérification
+      options:
+        - label: Je n'ai inclus aucune donnée de paie réelle ni aucun secret.
+          required: true

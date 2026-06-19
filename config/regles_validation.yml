@@ -1,0 +1,11 @@
+validation:
+  require_single_batch: true
+  require_single_date: true
+  require_balanced: true
+  debit_credit_tolerance: "0.00"
+  reject_zero_amount_lines: true
+  # false: un autre compte GL peut passer si l'écriture reste valide.
+  reject_unknown_accounts: false
+  reject_non_crlf_source: false
+  require_crlf_mnd_output: true
+  require_mnd_roundtrip: true

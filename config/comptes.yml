@@ -1,0 +1,5 @@
+accounts:
+  conversion_strategy: "drop_first_digit"
+  # Vide par défaut: les autres comptes GL ne sont pas bloqués.
+  allowed: []
+  source_to_mnd: {}

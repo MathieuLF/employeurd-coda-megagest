@@ -1,0 +1,15 @@
+mnd:
+  source_label: "EmployeurD"
+  reference_strategy: "employeurd_batch_full"
+  batch_strategy: "employeurd_batch_last_6_digits"
+  extra_field_strategy: "blank"
+  output_encoding: "cp1252"
+
+updates:
+  check_on_startup: false
+  channel: "stable"
+  url: "https://api.github.com/repos/MathieuLF/employeurd-coda-megagest/releases/latest"
+
+audit_log:
+  enabled: true
+  directory: ""

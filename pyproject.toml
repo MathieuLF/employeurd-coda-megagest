@@ -1,11 +1,20 @@
 [project]
-name = "employeurd-coda-megagest"
+name = "employeurd-to-megagest-mnd"
 version = "0.1.0"
-description = "Convertisseur de fichiers de paie vers un format d'import comptable."
+description = "Convertisseur local EmployeurD vers MégaGest MND avec validations strictes."
 requires-python = ">=3.11"
+license = "MIT"
+
+[project.optional-dependencies]
+build = ["pyinstaller>=6.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
 
 [project.scripts]
-payroll-mnd-converter = "payroll_mnd_converter.cli:main"
+employeurd-megagest = "employeurd_megagest.cli:main"
+employeurd-megagest-gui = "employeurd_megagest.app_gui:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
