@@ -149,7 +149,7 @@ def _load_reports_config(data: dict[str, Any]) -> ReportsConfig:
             require_matching_date=_as_bool(spd640_root.get("require_matching_date", False)),
             debit_total=_load_report_total(spd640_root.get("debit_total"), default_total, "debit_total"),
             credit_total=_load_report_total(spd640_root.get("credit_total"), default_total, "credit_total"),
-        )
+        ),
     )
 
 

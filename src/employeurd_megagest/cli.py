@@ -9,6 +9,7 @@ from .audit_log import write_audit_event
 from .config import load_app_config
 from .converter import convert_file, inspect_source, validate_file
 from .errors import ConfigurationError, ConversionError, FileOperationError, ValidationFailed
+from .integrity import check_running_app_integrity
 from .parser_mnd import parse_mnd_file
 from .parser_employeurd import parse_employeurd_file
 from .reports.spd640_parser import parse_spd640_csv
@@ -65,6 +66,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("check-update", help="Vérifie si une nouvelle version est disponible.")
 
+    subparsers.add_parser("check-integrity", help="Vérifie l'intégrité de la version ouverte.")
+
     subparsers.add_parser("self-test", help="Lance les tests unitaires locaux.")
     return parser
 
@@ -86,9 +89,7 @@ def main(argv: list[str] | None = None) -> int:
             return EXIT_OK
 
         if args.command == "validate":
-            reconciliations = []
-            if args.spd640:
-                reconciliations = [_handle_spd640_reconciliation(args.input, args.spd640, config, require=args.require_spd640)]
+            reconciliations = _collect_control_reconciliations(args, args.input, config)
             result = validate_file(
                 args.input,
                 config,
@@ -107,9 +108,7 @@ def main(argv: list[str] | None = None) -> int:
             return EXIT_OK
 
         if args.command == "convert":
-            reconciliations = []
-            if args.spd640:
-                reconciliations = [_handle_spd640_reconciliation(args.input, args.spd640, config, require=args.require_spd640)]
+            reconciliations = _collect_control_reconciliations(args, args.input, config)
             result = convert_file(args.input, args.output, config, period=args.period, overwrite=args.overwrite, reconciliations=reconciliations)
             _print_result(result.row_count, result.total_debit, result.total_credit, result.period, result.batch)
             print(f"sortie={result.output_path}")
@@ -144,7 +143,24 @@ def main(argv: list[str] | None = None) -> int:
             print(f"update_available={str(result.update_available).lower()}")
             print(f"current_version={result.current_version}")
             print(f"latest_version={result.latest_version or 'n/d'}")
+            print(f"sha256={result.sha256 or 'n/d'}")
             print(f"message={result.message}")
+            return EXIT_OK
+
+        if args.command == "check-integrity":
+            result = check_running_app_integrity(str(config.updates.get("url", "")))
+            print(f"status={result.status}")
+            print(f"verified={str(result.verified).lower()}")
+            print(f"current_version={result.current_version}")
+            print(f"executable={result.executable_path}")
+            print(f"local_sha256={result.local_sha256 or 'n/d'}")
+            print(f"expected_sha256={result.expected_sha256 or 'n/d'}")
+            print(f"signature={result.signature_status}")
+            print(f"message={result.message}")
+            if result.status == "mismatch":
+                return EXIT_VALIDATION
+            if result.status == "unavailable":
+                return EXIT_USAGE
             return EXIT_OK
 
     except ValidationFailed as error:
@@ -199,6 +215,14 @@ def _handle_spd640_reconciliation(source_path: Path, report_path: Path, config, 
     result = reconcile_spd640(entries, report_path, config, required=require or None)
     _print_spd640_reconciliation(result)
     return result
+
+
+def _collect_control_reconciliations(args, source_path: Path, config) -> list:
+    report_path = getattr(args, "spd640", None)
+    if not report_path:
+        return []
+    require = bool(getattr(args, "require_spd640", False))
+    return [_handle_spd640_reconciliation(source_path, report_path, config, require=require)]
 
 
 def _print_spd640_report(report) -> None:

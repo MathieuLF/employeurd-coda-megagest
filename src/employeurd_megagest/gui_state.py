@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .models import ConversionResult, ReconciliationResult, ValidationMessage
 from .output_plan import build_output_plan
+from .parser_employeurd import parse_employeurd_file
 
 
 MONEY_ZERO = Decimal("0.00")
@@ -102,10 +103,13 @@ def build_output_preview(
     if not writable:
         return OutputPreview(output_dir, detail="Le dossier de sortie ne semble pas accessible en écriture.", ok=False)
 
-    source_path = Path(source_value) if source_value.strip() else Path("conversion.txt")
+    source_path = Path(source_value) if source_value.strip() else Path("EmployeurD.txt")
+    entry_date, batch = _source_identity(source_path)
     plan = build_output_plan(
         source_path,
         output_dir,
+        entry_date=entry_date,
+        batch=batch,
         include_report=include_report,
         include_validation_json=include_validation_json,
     )
@@ -115,16 +119,21 @@ def build_output_preview(
         if path is not None
     )
     prefix = f"Sortie par défaut : {output_dir}" if using_default else f"Sortie choisie : {output_dir}"
-    detail = f"{prefix} - sous-dossier horodaté : {plan.directory.name}"
+    detail = f"{prefix}\nSous-dossier horodaté : {plan.directory.name}"
     return OutputPreview(plan.directory, files=files, detail=detail, ok=True)
 
 
-def build_metrics(result: ConversionResult | None, reconciliations: list[ReconciliationResult] | None = None) -> list[ResultMetric]:
+def build_metrics(
+    result: ConversionResult | None,
+    reconciliations: list[ReconciliationResult] | None = None,
+    *,
+    include_mnd_recheck: bool = True,
+) -> list[ResultMetric]:
     if not result:
         return [
             ResultMetric("Fichiers", "En attente de vérification"),
             ResultMetric("MND", "Créé après une vérification réussie"),
-            ResultMetric("SPD640-P", "Facultatif, utile pour confirmer les totaux"),
+            ResultMetric("SPD640-P", "Facultatif, utile pour confirmer les totaux débit/crédit"),
         ]
 
     delta = abs(result.total_debit - result.total_credit)
@@ -136,15 +145,17 @@ def build_metrics(result: ConversionResult | None, reconciliations: list[Reconci
         ResultMetric("Débits", _format_money(result.total_debit)),
         ResultMetric("Crédits", _format_money(result.total_credit)),
         ResultMetric("Écart", _format_money(delta)),
-        ResultMetric("Comptes détectés", str(result.account_count) if result.account_count is not None else "n/d"),
-        ResultMetric("Relecture MND", "OK" if result.status == "success" else "Échec"),
+        ResultMetric("Comptes uniques", str(result.account_count) if result.account_count is not None else "n/d"),
+        ResultMetric("Comptes au débit", str(result.debit_account_count) if result.debit_account_count is not None else "n/d"),
+        ResultMetric("Comptes au crédit", str(result.credit_account_count) if result.credit_account_count is not None else "n/d"),
     ]
+    if include_mnd_recheck:
+        metrics.append(ResultMetric("Relecture MND", "OK" if result.status == "success" else "Échec"))
 
     current_reconciliations = reconciliations if reconciliations is not None else result.reconciliations
     if current_reconciliations:
         for reconciliation in current_reconciliations:
-            label = "OK" if reconciliation.status == "success" else "Écart"
-            metrics.append(ResultMetric(reconciliation.report_type, f"{label} ({_format_money(reconciliation.debit_difference)} / {_format_money(reconciliation.credit_difference)})"))
+            metrics.extend(_reconciliation_metrics(reconciliation))
     else:
         metrics.append(ResultMetric("SPD640-P", "Non fourni / optionnel"))
     return metrics
@@ -157,8 +168,16 @@ def blocking_messages(result: ConversionResult | None, errors: tuple[str, ...] =
     return messages
 
 
-def summary_text(result: ConversionResult | None, reconciliations: list[ReconciliationResult] | None = None) -> str:
-    lines = [f"{metric.label}: {metric.value}" for metric in build_metrics(result, reconciliations)]
+def summary_text(
+    result: ConversionResult | None,
+    reconciliations: list[ReconciliationResult] | None = None,
+    *,
+    include_mnd_recheck: bool = True,
+) -> str:
+    lines = [
+        f"{metric.label}: {metric.value}"
+        for metric in build_metrics(result, reconciliations, include_mnd_recheck=include_mnd_recheck)
+    ]
     return "\n".join(lines)
 
 
@@ -178,6 +197,18 @@ def _directory_probably_writable(path: Path) -> bool:
     return os.access(target, os.W_OK)
 
 
+def _source_identity(path: Path):
+    if not path.exists() or not path.is_file():
+        return None, None
+    try:
+        entries = parse_employeurd_file(path)
+    except Exception:
+        return None, None
+    if not entries:
+        return None, None
+    return entries[0].entry_date, entries[0].batch
+
+
 def _format_size(size: int) -> str:
     if size < 1024:
         return f"{size} o"
@@ -192,6 +223,27 @@ def _format_datetime(timestamp: float) -> str:
 
 def _format_money(value: Decimal) -> str:
     return f"{value:,.2f} $".replace(",", " ").replace(".", ",")
+
+
+def _reconciliation_metrics(reconciliation: ReconciliationResult) -> list[ResultMetric]:
+    status = "concordant" if reconciliation.status == "success" else "en écart"
+    if reconciliation.report_type == "SPD640":
+        return [
+            ResultMetric(
+                "SPD640-P",
+                f"{status.capitalize()} - totaux comparés débit {_format_money(reconciliation.report_debit)} / crédit {_format_money(reconciliation.report_credit)}",
+            ),
+            ResultMetric(
+                "Écart SPD640-P",
+                f"débit {_format_money(reconciliation.debit_difference)} / crédit {_format_money(reconciliation.credit_difference)}",
+            ),
+        ]
+    return [
+        ResultMetric(
+            reconciliation.report_type,
+            f"{status.capitalize()} - écarts débit {_format_money(reconciliation.debit_difference)} / crédit {_format_money(reconciliation.credit_difference)}",
+        )
+    ]
 
 
 def _unknown_account_count(messages: list[ValidationMessage]) -> str:

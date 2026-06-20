@@ -1,64 +1,43 @@
 # EmployeurD-MegaGest
 
-EmployeurD-MegaGest est un utilitaire Windows local qui transforme une écriture détaillée EmployeurD au format TXT en fichier `.mnd` destiné à MégaGest.
+<p align="center">
+  <strong>Créer un fichier MND pour MégaGest à partir d'une écriture détaillée EmployeurD.</strong>
+</p>
 
-Il sert à préparer un import comptable de paie, avec des validations visibles avant de créer le fichier final.
+<p align="center">
+  <a href="https://mathieulf.github.io/employeurd-coda-megagest/"><img alt="Site" src="https://img.shields.io/badge/Site-Mathieu.PRO-0f766e?style=for-the-badge"></a>
+  <a href="https://github.com/MathieuLF/employeurd-coda-megagest/releases"><img alt="Télécharger" src="https://img.shields.io/badge/T%C3%A9l%C3%A9charger-GitHub-24292f?style=for-the-badge"></a>
+  <a href="https://github.com/MathieuLF/employeurd-coda-megagest/issues/new/choose"><img alt="Support" src="https://img.shields.io/badge/Support-Billet_GitHub-1d4ed8?style=for-the-badge"></a>
+</p>
 
-## À quoi ça sert
+![Aperçu de l'application](docs/assets/screenshots/v0.1.0/app-main.png)
 
-- Lire l'écriture détaillée EmployeurD standard au format TXT.
-- Créer un fichier MND prêt à tester dans MégaGest.
-- Comparer les totaux débit/crédit du MND avec ceux du fichier source.
-- Comparer aussi les totaux avec le rapport SPD640-P CSV, si ce rapport est fourni.
-- Produire au besoin un résumé Markdown et un fichier JSON de validation.
+## En bref
 
-Le traitement se fait sur l'ordinateur de l'utilisateur. Aucun fichier de paie n'est envoyé par l'application.
+EmployeurD-MegaGest est un utilitaire Windows qui prépare un fichier `.mnd` pour MégaGest à partir d'une écriture détaillée EmployeurD au format TXT.
 
-## Utilisation
+Un rapport SPD640-P CSV peut être ajouté au besoin pour confirmer les totaux débit/crédit avant la création du MND.
 
-1. Télécharger l'exécutable depuis les versions officielles publiées sur GitHub.
-2. Ouvrir `EmployeurD-MegaGest.exe`.
-3. Ajouter l'écriture détaillée EmployeurD au format TXT.
-4. Ajouter le rapport SPD640-P au format CSV si vous voulez corroborer les totaux.
-5. Cliquer sur `Vérifier la paie`.
-6. Si tout est conforme, cliquer sur `Créer le MND`.
-7. Tester le fichier MND dans MégaGest hors production avant toute utilisation réelle.
+## Utiliser l'application
 
-Sans dossier de sortie choisi, l'application utilise le dossier Documents et crée un sous-dossier horodaté.
+1. Télécharger la dernière version depuis [GitHub Releases](https://github.com/MathieuLF/employeurd-coda-megagest/releases).
+2. Extraire le fichier zip.
+3. Ouvrir `EmployeurD-MegaGest.exe`.
+4. Ajouter l'écriture EmployeurD TXT.
+5. Ajouter le rapport SPD640-P CSV au besoin.
+6. Vérifier la paie, puis créer le MND si tout est conforme.
 
-Les exécutables publics sont publiés seulement après les vérifications de sécurité prévues.
-
-## Aperçu
-
-Le microsite de présentation est disponible dans [docs/index.html](docs/index.html).
-
-Les captures d'écran versionnées sont conservées dans [docs/assets/screenshots](docs/assets/screenshots).
-
-## Données d'exemple
-
-Les fichiers dans [samples](samples) sont synthétiques et peuvent être suivis dans Git. Ils servent aux tests, à la démonstration et à la documentation.
-
-Aucun fichier de paie réel ne doit être ajouté au dépôt, joint à un billet GitHub ou transmis à un service externe.
-
-## Support
-
-Pour un problème ou une amélioration, privilégiez l'ouverture d'un billet GitHub.
-
-Pour un contact direct : services@mathieu.pro
-
-Ne joignez jamais de fichier TXT EmployeurD réel, de rapport SPD réel, de MND réel, de rapport Markdown, de JSON de validation ou de capture contenant des données sensibles.
-
-## Documents utiles
+## Pages utiles
 
 - [Guide rapide](docs/guide_utilisateur.md)
-- [Formats TXT et MND](docs/formats.md)
+- [Formats des fichiers](docs/formats.md)
 - [Sécurité](SECURITY.md)
+- [Support](SUPPORT.md)
 - [Mentions légales](docs/mentions_legales.md)
+- [Licence MIT](LICENSE)
 
-## Licence
+## Important
 
-Le code est publié sous licence [MIT](LICENSE).
+Ne publiez jamais de fichier de paie réel dans GitHub, dans un billet public ou dans un service externe.
 
-## Mentions légales
-
-EmployeurD, PG Solutions, MégaGest et les autres marques citées appartiennent à leurs propriétaires respectifs. Ce projet n'est pas affilié, approuvé, commandité ni garanti par ces propriétaires.
+EmployeurD, PG Solutions, MégaGest et les autres marques citées appartiennent à leurs propriétaires respectifs.

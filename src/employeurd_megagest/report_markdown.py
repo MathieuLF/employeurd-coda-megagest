@@ -32,7 +32,9 @@ def build_markdown_report(result: ConversionResult) -> str:
         f"- Période: {result.period or 'n/d'}",
         f"- Date d'écriture: {result.entry_date or 'n/d'}",
         f"- Lot: {result.batch or 'n/d'}",
-        f"- Comptes détectés: {result.account_count if result.account_count is not None else 'n/d'}",
+        f"- Comptes uniques: {result.account_count if result.account_count is not None else 'n/d'}",
+        f"- Comptes au débit: {result.debit_account_count if result.debit_account_count is not None else 'n/d'}",
+        f"- Comptes au crédit: {result.credit_account_count if result.credit_account_count is not None else 'n/d'}",
         "",
         "## Empreintes",
         "",
@@ -75,6 +77,10 @@ def build_markdown_report(result: ConversionResult) -> str:
             )
             if reconciliation.messages:
                 lines.extend(_format_message(message) for message in reconciliation.messages)
+                lines.append("")
+            if reconciliation.details:
+                lines.append("Détails de contrôle:")
+                lines.extend(f"- {key}: {value}" for key, value in sorted(reconciliation.details.items()))
                 lines.append("")
     else:
         lines.append("- Aucun rapprochement fourni.")

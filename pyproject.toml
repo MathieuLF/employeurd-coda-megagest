@@ -6,10 +6,10 @@ requires-python = ">=3.11"
 license = "MIT"
 
 [project.optional-dependencies]
-build = ["pyinstaller>=6.0"]
+build = ["cx_Freeze>=8.6.4"]
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=82.0.1"]
 build-backend = "setuptools.build_meta"
 
 [project.scripts]
@@ -18,6 +18,10 @@ employeurd-megagest-gui = "employeurd_megagest.app_gui:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+employeurd_megagest = ["assets/*.png"]

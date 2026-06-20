@@ -22,7 +22,23 @@ SECRET_PATTERNS = (
     ),
 )
 
-IGNORED_DIRS = {".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", "__pycache__", "build", "dist", "outputs"}
+IGNORED_DIRS = {
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    ".venv-build",
+    "__pycache__",
+    "build",
+    "dist",
+    "interne",
+    "logs",
+    "notes-privees",
+    "outputs",
+    "venv",
+    "ENV",
+}
 TEXT_SUFFIXES = {
     "",
     ".cfg",
@@ -42,18 +58,35 @@ TEXT_SUFFIXES = {
 REQUIRED_GITIGNORE_PATTERNS = (
     ".env",
     ".env.*",
+    "interne/",
+    "secrets/",
+    "credentials/",
+    "notes-privees/",
     "outputs/",
+    "logs/",
     "dist/",
     "build/",
+    "*.pem",
+    "*.key",
+    "*.p12",
+    "*.pfx",
+    "*.cer",
+    "*.crt",
+    "*.der",
     "*.mnd",
     "*.rapport.md",
     "*.validation.json",
+    "*.security.local.md",
+    "*.virustotal.local.md",
 )
 BLOCKED_TRACKED_PATTERNS = (
     re.compile(r"(^|/)\.env(\..*)?$"),
-    re.compile(r"(^|/)(outputs|logs|dist|build)/"),
-    re.compile(r"\.(mnd|p12|pfx|pem|key)$", re.IGNORECASE),
+    re.compile(r"(^|/)interne/"),
+    re.compile(r"(^|/)(outputs|logs|dist|build|secrets|credentials|notes-privees)/"),
+    re.compile(r"(^|/)scripts/generate_icon\.ps1$"),
+    re.compile(r"\.(mnd|p12|pfx|pem|key|cer|crt|der)$", re.IGNORECASE),
     re.compile(r"\.(rapport\.md|validation\.json)$", re.IGNORECASE),
+    re.compile(r"\.(security|virustotal)\.local\.md$", re.IGNORECASE),
 )
 
 
@@ -67,6 +100,7 @@ def main() -> int:
     issues: list[str] = []
 
     issues.extend(_version_issues(root, args.version))
+    issues.extend(_release_policy_issues(root))
     issues.extend(_gitignore_issues(root))
     issues.extend(_tracked_file_issues(root))
     issues.extend(_secret_issues(root))
@@ -111,6 +145,50 @@ def _gitignore_issues(root: Path) -> list[str]:
         if line.strip() and not line.lstrip().startswith("#")
     }
     return [f".gitignore devrait contenir {pattern!r}." for pattern in REQUIRED_GITIGNORE_PATTERNS if pattern not in lines]
+
+
+def _release_policy_issues(root: Path) -> list[str]:
+    issues: list[str] = []
+    pyproject_text = (root / "pyproject.toml").read_text(encoding="utf-8")
+    if "cx_Freeze" not in pyproject_text:
+        issues.append("pyproject.toml doit déclarer cx_Freeze comme dépendance de build.")
+    if "pyinstaller" in pyproject_text.lower():
+        issues.append("pyproject.toml ne doit plus déclarer l'ancien packager pour la mise en ligne officielle.")
+
+    build_script = (root / "scripts" / "build_exe.ps1").read_text(encoding="utf-8")
+    if "cx_Freeze" not in build_script:
+        issues.append("scripts/build_exe.ps1 doit utiliser cx_Freeze.")
+    if "pyinstaller" in build_script.lower():
+        issues.append("scripts/build_exe.ps1 ne doit pas utiliser l'ancien packager pour la mise en ligne officielle.")
+    if "--icon" not in build_script or "EmployeurD-MegaGest.ico" not in build_script:
+        issues.append("scripts/build_exe.ps1 doit intégrer l'icône produit Windows.")
+    for asset in (
+        root / "packaging" / "windows" / "EmployeurD-MegaGest.ico",
+        root / "src" / "employeurd_megagest" / "assets" / "app-icon.png",
+        root / "docs" / "assets" / "product-icon.png",
+    ):
+        if not asset.exists():
+            issues.append(f"Asset d'icône produit manquant: {asset.relative_to(root)}")
+
+    release_workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    if "--fail-on-detections" not in release_workflow:
+        issues.append(".github/workflows/release.yml doit bloquer les détections VirusTotal.")
+    if "-portable.zip" not in release_workflow or "-portable.exe.sha256" not in release_workflow:
+        issues.append(".github/workflows/release.yml doit publier le paquet portable et ses empreintes.")
+    if "generate_release_manifest.py" not in release_workflow or ".release-manifest.json" not in release_workflow:
+        issues.append(".github/workflows/release.yml doit générer et publier le manifeste de mise en ligne.")
+    if "append_release_verification.py" not in release_workflow:
+        issues.append(".github/workflows/release.yml doit afficher le score VirusTotal dans les notes de mise en ligne.")
+
+    publish_script = (root / "scripts" / "publish_release.ps1").read_text(encoding="utf-8")
+    if "generate_release_manifest.py" not in publish_script or ".release-manifest.json" not in publish_script:
+        issues.append("scripts/publish_release.ps1 doit générer et joindre le manifeste de mise en ligne.")
+    if "append_release_verification.py" not in publish_script:
+        issues.append("scripts/publish_release.ps1 doit afficher le score VirusTotal dans les notes de mise en ligne.")
+    if "$CreateGitHubRelease -and $AllowVirusTotalDetections" not in publish_script:
+        issues.append("scripts/publish_release.ps1 doit empêcher une mise en ligne GitHub avec des détections VirusTotal ignorées.")
+
+    return issues
 
 
 def _tracked_file_issues(root: Path) -> list[str]:
@@ -162,6 +240,8 @@ def _is_ignored_for_scan(root: Path, path: Path) -> bool:
     if path.name == ".env" or (path.name.startswith(".env.") and path.name != ".env.example"):
         return True
     relative_parts = path.relative_to(root).parts
+    if any(part == ".venv" or part.startswith(".venv-") for part in relative_parts):
+        return True
     return any(part in IGNORED_DIRS for part in relative_parts)
 
 

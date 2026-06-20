@@ -28,6 +28,8 @@ def build_validation_payload(result: ConversionResult) -> dict[str, Any]:
         "batch": result.batch,
         "entry_date": result.entry_date,
         "account_count": result.account_count,
+        "debit_account_count": result.debit_account_count,
+        "credit_account_count": result.credit_account_count,
         "unknown_account_count": result.unknown_account_count,
         "source_sha256": result.source_sha256,
         "mnd_sha256": result.mnd_sha256,
@@ -69,5 +71,6 @@ def _reconciliation_payload(reconciliation) -> dict[str, Any]:
         "report_period": reconciliation.report_period,
         "source_dates": list(reconciliation.source_dates),
         "report_dates": list(reconciliation.report_dates),
+        "details": dict(reconciliation.details),
         "messages": [asdict(message) for message in reconciliation.messages],
     }

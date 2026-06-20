@@ -5,24 +5,30 @@ from tkinter import ttk
 
 
 class Palette:
-    background = "#f5f7f8"
+    background = "#f5f5f5"
     surface = "#ffffff"
-    surface_alt = "#f8fafb"
+    surface_alt = "#fafafa"
+    surface_hover = "#f3f8ff"
     header = "#ffffff"
-    header_muted = "#52606d"
-    text = "#1f2937"
-    muted = "#4b5563"
-    border = "#d8dee4"
-    primary = "#0f766e"
-    primary_dark = "#115e59"
-    success = "#157347"
-    success_bg = "#e6f4ea"
+    header_muted = "#5f6b7a"
+    text = "#1f1f1f"
+    muted = "#616161"
+    border = "#e0e0e0"
+    border_strong = "#c7c7c7"
+    primary = "#0f6cbd"
+    primary_hover = "#115ea3"
+    primary_pressed = "#0f548c"
+    primary_dark = "#0b4a7a"
+    success = "#107c10"
+    success_bg = "#f1faf1"
     warning = "#8a5a00"
-    warning_bg = "#fff4cf"
-    danger = "#b42318"
-    danger_bg = "#fde8e7"
-    info_bg = "#e6f3f1"
-    disabled = "#9aa5b1"
+    warning_bg = "#fff8e1"
+    danger = "#c50f1f"
+    danger_bg = "#fdf3f4"
+    info_bg = "#eef6fc"
+    disabled = "#a19f9d"
+    disabled_bg = "#f3f2f1"
+    focus = "#005fb8"
 
 
 def configure_theme(root: tk.Tk) -> None:
@@ -47,22 +53,90 @@ def configure_theme(root: tk.Tk) -> None:
     style.configure("HeaderMeta.TLabel", background=Palette.header, foreground=Palette.header_muted, font=("Segoe UI", 10))
     style.configure("HeaderBadge.TLabel", background=Palette.info_bg, foreground=Palette.primary_dark, font=("Segoe UI Semibold", 9), padding=(9, 4))
     style.configure("Title.TLabel", background=Palette.surface, foreground=Palette.text, font=("Segoe UI Semibold", 10))
+    style.configure("RequiredBadge.TLabel", background=Palette.danger_bg, foreground=Palette.danger, font=("Segoe UI Semibold", 8), padding=(8, 3))
+    style.configure("OptionalBadge.TLabel", background=Palette.info_bg, foreground=Palette.primary_dark, font=("Segoe UI Semibold", 8), padding=(8, 3))
     style.configure("Body.TLabel", background=Palette.surface, foreground=Palette.text)
+    style.configure("HintInfo.TLabel", background=Palette.info_bg, foreground=Palette.primary_dark, font=("Segoe UI", 9), padding=(10, 7))
+    style.configure("HintSuccess.TLabel", background=Palette.success_bg, foreground=Palette.success, font=("Segoe UI", 9), padding=(10, 7))
+    style.configure("HintWarning.TLabel", background=Palette.warning_bg, foreground=Palette.warning, font=("Segoe UI", 9), padding=(10, 7))
     style.configure("Muted.TLabel", background=Palette.surface, foreground=Palette.muted)
     style.configure("SmallMuted.TLabel", background=Palette.surface, foreground=Palette.muted, font=("Segoe UI", 9))
     style.configure("Footer.TLabel", background=Palette.background, foreground=Palette.muted, font=("Segoe UI", 9))
     style.configure("SurfaceFooter.TLabel", background=Palette.surface, foreground=Palette.muted, font=("Segoe UI", 9))
     style.configure("Link.TLabel", background=Palette.background, foreground=Palette.primary, font=("Segoe UI Semibold", 9))
     style.configure("CardLink.TLabel", background=Palette.surface, foreground=Palette.primary, font=("Segoe UI Semibold", 9))
-    style.configure("StatusTitle.TLabel", background=Palette.surface, foreground=Palette.text, font=("Segoe UI Semibold", 11))
+    style.configure("StatusTitle.TLabel", background=Palette.surface, foreground=Palette.text, font=("Segoe UI Semibold", 14))
     style.configure("PanelEyebrow.TLabel", background=Palette.surface, foreground=Palette.primary_dark, font=("Segoe UI Semibold", 9))
-    style.configure("StepBadge.TLabel", background=Palette.info_bg, foreground=Palette.primary_dark, font=("Segoe UI Semibold", 9), padding=(7, 3))
-    style.configure("Primary.TButton", font=("Segoe UI Semibold", 10), padding=(14, 8))
-    style.configure("Action.TButton", padding=(10, 7))
-    style.configure("Quiet.TButton", padding=(9, 6))
-    style.map("Primary.TButton", background=[("active", Palette.primary_dark), ("!disabled", Palette.primary)], foreground=[("!disabled", "#ffffff")])
-    style.configure("TEntry", padding=(6, 5))
-    style.configure("Horizontal.TProgressbar", troughcolor="#e4e7ec", background=Palette.primary)
+    style.configure("StepBadge.TLabel", background=Palette.info_bg, foreground=Palette.primary_dark, font=("Segoe UI Semibold", 10), padding=(9, 5))
+    style.configure(
+        "Primary.TButton",
+        font=("Segoe UI Semibold", 10),
+        padding=(15, 8),
+        background=Palette.primary,
+        foreground="#ffffff",
+        bordercolor=Palette.primary,
+        lightcolor=Palette.primary,
+        darkcolor=Palette.primary,
+        focusthickness=1,
+        focuscolor=Palette.focus,
+    )
+    style.configure(
+        "Action.TButton",
+        padding=(12, 7),
+        background=Palette.surface,
+        foreground=Palette.text,
+        bordercolor=Palette.border_strong,
+        lightcolor=Palette.surface,
+        darkcolor=Palette.border,
+        focusthickness=1,
+        focuscolor=Palette.focus,
+    )
+    style.configure(
+        "Quiet.TButton",
+        padding=(11, 7),
+        background=Palette.surface_alt,
+        foreground=Palette.text,
+        bordercolor=Palette.border,
+        lightcolor=Palette.surface_alt,
+        darkcolor=Palette.border,
+        focusthickness=1,
+        focuscolor=Palette.focus,
+    )
+    style.map(
+        "Primary.TButton",
+        background=[
+            ("disabled", Palette.disabled_bg),
+            ("pressed", Palette.primary_pressed),
+            ("active", Palette.primary_hover),
+            ("!disabled", Palette.primary),
+        ],
+        foreground=[("disabled", Palette.disabled), ("!disabled", "#ffffff")],
+        bordercolor=[("disabled", Palette.disabled_bg), ("!disabled", Palette.primary)],
+    )
+    style.map(
+        "Action.TButton",
+        background=[("disabled", Palette.disabled_bg), ("pressed", "#e8f1fb"), ("active", Palette.surface_hover), ("!disabled", Palette.surface)],
+        foreground=[("disabled", Palette.disabled), ("!disabled", Palette.text)],
+        bordercolor=[("active", Palette.primary), ("!disabled", Palette.border_strong)],
+    )
+    style.map(
+        "Quiet.TButton",
+        background=[("disabled", Palette.disabled_bg), ("pressed", "#ededed"), ("active", "#f7f7f7"), ("!disabled", Palette.surface_alt)],
+        foreground=[("disabled", Palette.disabled), ("!disabled", Palette.text)],
+    )
+    style.configure(
+        "TEntry",
+        padding=(7, 6),
+        fieldbackground=Palette.surface,
+        bordercolor=Palette.border_strong,
+        lightcolor=Palette.surface,
+        darkcolor=Palette.border,
+        insertcolor=Palette.text,
+    )
+    style.map("TEntry", bordercolor=[("focus", Palette.primary), ("!disabled", Palette.border_strong)])
+    style.configure("TCheckbutton", background=Palette.surface, foreground=Palette.text, focuscolor=Palette.focus)
+    style.map("TCheckbutton", foreground=[("disabled", Palette.disabled), ("!disabled", Palette.text)])
+    style.configure("Horizontal.TProgressbar", troughcolor="#e5e5e5", background=Palette.primary)
     style.configure("Vertical.TScrollbar", troughcolor=Palette.background, background=Palette.border, arrowcolor=Palette.muted)
     style.configure("TNotebook", background=Palette.surface, borderwidth=0)
     style.configure("TNotebook.Tab", padding=(12, 6), font=("Segoe UI Semibold", 9))

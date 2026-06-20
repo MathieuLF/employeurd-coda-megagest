@@ -4,6 +4,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from .config import AppConfig
+from .errors import ValidationFailed
 from .models import EmployeurDEntry, ReconciliationResult, ValidationMessage
 from .reports.spd640_parser import parse_spd640_csv, reconcile_spd640_with_source_totals
 from .validator import source_totals
@@ -116,6 +117,20 @@ def reconcile_spd640(
         report_dates=report_dates,
         messages=messages,
     )
+
+
+def reconcile_control_report(
+    entries: list[EmployeurDEntry],
+    report_path: Path,
+    config: AppConfig,
+    *,
+    required: bool | None = None,
+) -> ReconciliationResult:
+    name = report_path.name.lower()
+    suffix = report_path.suffix.lower()
+    if "spd640" in name or suffix == ".csv":
+        return reconcile_spd640(entries, report_path, config, required=required)
+    raise ValidationFailed("Type de rapport de contrôle non reconnu. Utilisez un SPD640-P CSV.")
 
 
 def reconciliation_failed(result: ReconciliationResult) -> bool:

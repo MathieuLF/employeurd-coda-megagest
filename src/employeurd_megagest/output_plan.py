@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 
@@ -18,11 +18,13 @@ def build_output_plan(
     output_root: Path,
     *,
     now: datetime | None = None,
+    entry_date: date | None = None,
+    batch: str | None = None,
     include_report: bool = True,
     include_validation_json: bool = True,
 ) -> OutputPlan:
     timestamp = (now or datetime.now()).strftime("%Y%m%d-%H%M%S")
-    safe_stem = _safe_stem(source_path.stem or "conversion")
+    safe_stem = _safe_output_stem(source_path, entry_date=entry_date, batch=batch)
     base_dir = output_root / timestamp
     directory = _next_available_directory(base_dir)
     mnd_path = directory / f"{safe_stem}.mnd"
@@ -47,3 +49,13 @@ def _next_available_directory(base_dir: Path) -> Path:
 def _safe_stem(value: str) -> str:
     cleaned = "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in value)
     return cleaned.strip("._") or "conversion"
+
+
+def _safe_output_stem(source_path: Path, *, entry_date: date | None, batch: str | None) -> str:
+    if entry_date:
+        parts = ["EmployeurD", entry_date.strftime("%Y%m%d")]
+        cleaned_batch = _safe_stem(batch or "")
+        if cleaned_batch and cleaned_batch != "conversion":
+            parts.extend(["lot", cleaned_batch])
+        return _safe_stem("_".join(parts))
+    return _safe_stem(source_path.stem or "conversion")

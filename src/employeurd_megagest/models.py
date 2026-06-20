@@ -72,6 +72,7 @@ class ReconciliationResult:
     report_period: str | None
     source_dates: tuple[str, ...] = ()
     report_dates: tuple[str, ...] = ()
+    details: dict[str, str] = field(default_factory=dict)
     messages: list[ValidationMessage] = field(default_factory=list)
 
 
@@ -89,6 +90,8 @@ class ConversionResult:
     batch: str | None
     entry_date: str | None = None
     account_count: int | None = None
+    debit_account_count: int | None = None
+    credit_account_count: int | None = None
     unknown_account_count: int = 0
     source_sha256: str | None = None
     mnd_sha256: str | None = None
