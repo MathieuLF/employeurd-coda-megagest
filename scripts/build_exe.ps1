@@ -5,23 +5,45 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$Spec = (Resolve-Path -LiteralPath "packaging/windows/EmployeurD-MegaGest.spec").Path
+$Manifest = (Resolve-Path -LiteralPath "packaging/windows/EmployeurD-MegaGest.manifest").Path
+$Icon = (Resolve-Path -LiteralPath "packaging/windows/EmployeurD-MegaGest.ico").Path
+$TargetDir = "dist/$Name"
+$PortableZip = "dist/$Name-v$Version-portable.zip"
 
-$env:EMG_APP_NAME = $Name
-try {
-    python -m PyInstaller --clean --noconfirm $Spec
-    if ($LASTEXITCODE -ne 0) {
-        throw "PyInstaller a échoué avec le code $LASTEXITCODE"
-    }
-} finally {
-    Remove-Item Env:\EMG_APP_NAME -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Path "dist" -Force | Out-Null
+Remove-Item -LiteralPath $TargetDir -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath "dist/$Name.exe" -Force -ErrorAction SilentlyContinue
+Get-ChildItem -LiteralPath "dist" -Filter "$Name-v$Version*" -File -ErrorAction SilentlyContinue | Remove-Item -Force
+
+python -m cx_Freeze `
+    --script "src/employeurd_megagest/gui_entry.py" `
+    --base gui `
+    --target-name $Name `
+    --target-dir $TargetDir `
+    --manifest $Manifest `
+    --icon $Icon `
+    --copyright "Copyright 2026 Mathieu Lapointe-Fiset" `
+    build_exe
+if ($LASTEXITCODE -ne 0) {
+    throw "cx_Freeze a échoué avec le code $LASTEXITCODE"
 }
 
-$Exe = "dist/$Name.exe"
-if (Test-Path $Exe) {
-    $Hash = Get-FileHash -Algorithm SHA256 $Exe
-    $Hash.Hash + "  $Name.exe" | Set-Content -Encoding ascii "dist/$Name-v$Version.exe.sha256"
-    Copy-Item -LiteralPath $Exe -Destination "dist/$Name-v$Version.exe" -Force
-    Compress-Archive -LiteralPath "dist/$Name-v$Version.exe", "dist/$Name-v$Version.exe.sha256" -DestinationPath "dist/$Name-v$Version.zip" -Force
-    $Hash | Format-List
+Copy-Item -LiteralPath "config" -Destination "$TargetDir/config" -Recurse -Force
+
+$PortableExe = "$TargetDir/$Name.exe"
+if (-not (Test-Path $PortableExe)) {
+    throw "Exécutable portable introuvable: $PortableExe"
 }
+
+$PortableExeHash = Get-FileHash -Algorithm SHA256 $PortableExe
+$PortableExeHash.Hash + "  $Name.exe" | Set-Content -Encoding ascii "dist/$Name-v$Version-portable.exe.sha256"
+
+if (Test-Path $PortableZip) {
+    Remove-Item -LiteralPath $PortableZip -Force
+}
+Compress-Archive -LiteralPath $TargetDir -DestinationPath $PortableZip -Force
+$PortableZipHash = Get-FileHash -Algorithm SHA256 $PortableZip
+$PortableZipHash.Hash + "  $Name-v$Version-portable.zip" | Set-Content -Encoding ascii "$PortableZip.sha256"
+
+$PortableExeHash | Format-List
+$PortableZipHash | Format-List

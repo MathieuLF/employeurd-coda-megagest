@@ -20,13 +20,13 @@ jobs:
   draft-release:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.0
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6.2.0
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Déterminer la version
         shell: pwsh
@@ -48,6 +48,34 @@ jobs:
         shell: pwsh
         run: .\scripts\release.ps1 -Version $env:RELEASE_VERSION
 
+      - name: Vérifier l'exécutable avec VirusTotal
+        shell: pwsh
+        env:
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}
+        run: |
+          if (-not $env:VT_API_KEY) {
+            throw "Le secret VT_API_KEY est requis pour créer une mise en ligne."
+          }
+          python scripts/submit_virustotal.py `
+            --file "dist/EmployeurD-MegaGest/EmployeurD-MegaGest.exe" `
+            --output "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.virustotal.md" `
+            --wait-minutes 10 `
+            --require-submit `
+            --fail-on-detections
+
+      - name: Générer le manifeste de mise en ligne
+        shell: pwsh
+        run: |
+          python scripts/generate_release_manifest.py `
+            --version $env:RELEASE_VERSION `
+            --require-clean-virustotal
+
+      - name: Ajouter le score VirusTotal aux notes
+        shell: pwsh
+        run: |
+          python scripts/append_release_verification.py `
+            --version $env:RELEASE_VERSION
+
       - name: Créer la mise en ligne GitHub en brouillon
         shell: pwsh
         env:
@@ -57,9 +85,10 @@ jobs:
             --draft `
             --title "EmployeurD-MegaGest v$env:RELEASE_VERSION" `
             --notes-file "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.release-notes.md" `
-            "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.exe" `
-            "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.exe.sha256" `
-            "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.zip" `
+            "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION-portable.zip" `
+            "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION-portable.zip.sha256" `
+            "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION-portable.exe.sha256" `
             "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.sbom.json" `
             "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.security.md" `
-            "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.virustotal.md"
+            "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.virustotal.md" `
+            "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.release-manifest.json"

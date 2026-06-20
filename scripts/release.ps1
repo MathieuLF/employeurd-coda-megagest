@@ -19,7 +19,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Les tests ont échoué avec le code $LASTEXITCODE"
 }
 
-python -m compileall src
+python -X pycache_prefix=build/pycache -m compileall src
 if ($LASTEXITCODE -ne 0) {
     throw "La compilation Python a échoué avec le code $LASTEXITCODE"
 }
@@ -36,15 +36,21 @@ if ($LASTEXITCODE -ne 0) {
 
 .\scripts\build_exe.ps1 -Version $Version
 
+$PortableExe = "dist/EmployeurD-MegaGest/EmployeurD-MegaGest.exe"
+$PortableExeHash = (Get-FileHash -Algorithm SHA256 $PortableExe).Hash
+$Signature = Get-AuthenticodeSignature -LiteralPath $PortableExe
+
 $Security = "dist/EmployeurD-MegaGest-v$Version.security.md"
 @"
 # Rapport sécurité EmployeurD-MegaGest v$Version
 
 - Données de paie: non incluses dans la mise en ligne.
+- Packager: cx_Freeze, paquet portable.
+- SHA256 exécutable: $PortableExeHash.
+- Signature Windows: $($Signature.Status).
 - Conversion: locale.
 - Mise à jour: vérification explicite, sans envoi de fichiers.
-- VirusTotal: à produire pour l'exécutable public seulement.
-- Signature: à renseigner selon le certificat disponible.
+- VirusTotal: rapport joint séparément pour l'exécutable public seulement.
 - Mentions légales: voir docs/mentions_legales.md.
 "@ | Set-Content -Encoding utf8 $Security
 
@@ -52,6 +58,6 @@ $VirusTotal = "dist/EmployeurD-MegaGest-v$Version.virustotal.md"
 @"
 # Rapport VirusTotal EmployeurD-MegaGest v$Version
 
-A compléter après l'analyse de l'exécutable public seulement.
+Rapport à produire après l'analyse de l'exécutable public seulement.
 Ne jamais soumettre de TXT EmployeurD, SPD, MND, Markdown ou JSON de validation.
 "@ | Set-Content -Encoding utf8 $VirusTotal

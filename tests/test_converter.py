@@ -21,6 +21,7 @@ from employeurd_megagest.errors import ValidationFailed
 from employeurd_megagest.app_gui import _generated_outputs_message
 from employeurd_megagest.gui_controller import GuiController, GuiOperationResult
 from employeurd_megagest.gui_state import GuiViewState, build_file_preview, build_metrics, build_output_preview, default_output_root
+from employeurd_megagest.integrity import IntegrityCheckResult, check_running_app_integrity
 from employeurd_megagest.output_plan import build_output_plan
 from employeurd_megagest.parser_employeurd import parse_employeurd_file, parse_employeurd_line
 from employeurd_megagest.parser_mnd import parse_mnd_file, parse_mnd_text
@@ -33,9 +34,12 @@ from employeurd_megagest.preferences import (
 )
 from employeurd_megagest.reconciliation import reconcile_spd640, reconciliation_failed
 from employeurd_megagest.reports.spd640_parser import parse_spd640_csv, reconcile_spd640_with_source_totals
+from employeurd_megagest.resource_paths import package_asset_path
 from employeurd_megagest.update_check import DEFAULT_UPDATE_URL, check_for_update
 from employeurd_megagest.validator import convert_account, mnd_totals, source_totals
 from employeurd_megagest.writer_mnd import MND_LINE_LENGTH
+from scripts import append_release_verification, generate_release_manifest, submit_virustotal
+from scripts.submit_virustotal import collect_detections
 
 
 class EmployeurDMegaGestTest(unittest.TestCase):
@@ -52,6 +56,14 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertEqual(entries[0].account, "50213000140")
         self.assertEqual(entries[0].amount, Decimal("1000.00"))
         self.assertEqual(entries[0].entry_date.strftime("%Y%m%d"), "20260618")
+
+    def test_product_icon_assets_are_present(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+
+        self.assertTrue(package_asset_path("app-icon.png").exists())
+        self.assertTrue((root / "packaging" / "windows" / "EmployeurD-MegaGest.ico").exists())
+        self.assertTrue((root / "docs" / "assets" / "product-icon.png").exists())
+        self.assertIn("--icon", (root / "scripts" / "build_exe.ps1").read_text(encoding="utf-8"))
 
     def test_source_totals_balance_with_decimal(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -369,6 +381,34 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertEqual(result.published_at, "2026-06-18T12:00:00Z")
         self.assertEqual(result.release_notes, "Notes synthétiques")
 
+    def test_update_check_reads_github_release_assets(self) -> None:
+        expected_hash = "a" * 64
+        with (
+            patch("employeurd_megagest.update_check._fetch_json") as fetch_json,
+            patch("employeurd_megagest.update_check._fetch_text") as fetch_text,
+        ):
+            fetch_json.return_value = {
+                "tag_name": "v0.1.1",
+                "html_url": "https://example.invalid/releases/v0.1.1",
+                "assets": [
+                    {
+                        "name": "EmployeurD-MegaGest-v0.1.1-portable.zip",
+                        "browser_download_url": "https://example.invalid/app-portable.zip",
+                    },
+                    {
+                        "name": "EmployeurD-MegaGest-v0.1.1-portable.exe.sha256",
+                        "browser_download_url": "https://example.invalid/app.exe.sha256",
+                    },
+                ],
+            }
+            fetch_text.return_value = f"{expected_hash.upper()}  EmployeurD-MegaGest.exe"
+
+            result = check_for_update(DEFAULT_UPDATE_URL, current_version="0.1.0")
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.download_url, "https://example.invalid/app-portable.zip")
+        self.assertEqual(result.sha256, expected_hash)
+
     def test_update_check_uses_default_url_when_config_is_blank_or_placeholder(self) -> None:
         with patch("employeurd_megagest.update_check._fetch_json") as fetch:
             fetch.return_value = {"tag_name": "v0.1.0", "html_url": "https://example.invalid/release"}
@@ -391,6 +431,40 @@ class EmployeurDMegaGestTest(unittest.TestCase):
 
         self.assertFalse(result.ok)
         self.assertIn("Aucune mise en ligne officielle", result.message)
+
+    def test_integrity_check_compares_running_executable_to_release_hash(self) -> None:
+        expected_hash = "b" * 64
+        local = IntegrityCheckResult(
+            status="local",
+            current_version="0.1.0",
+            executable_path=Path("EmployeurD-MegaGest.exe"),
+            local_sha256=expected_hash,
+            expected_sha256=None,
+            signature_status="NotSigned",
+            release_url=None,
+            message="local",
+        )
+        with (
+            patch("employeurd_megagest.integrity.local_integrity_details", return_value=local),
+            patch("employeurd_megagest.integrity._fetch_json") as fetch_json,
+            patch("employeurd_megagest.integrity._fetch_text") as fetch_text,
+        ):
+            fetch_json.return_value = {
+                "tag_name": "v0.1.0",
+                "assets": [
+                    {
+                        "name": "EmployeurD-MegaGest-v0.1.0.exe.sha256",
+                        "browser_download_url": "https://example.invalid/app.exe.sha256",
+                    }
+                ],
+            }
+            fetch_text.return_value = f"{expected_hash.upper()}  EmployeurD-MegaGest.exe"
+
+            result = check_running_app_integrity(DEFAULT_UPDATE_URL, current_version="0.1.0", frozen=True)
+
+        self.assertTrue(result.verified)
+        self.assertEqual(result.expected_sha256, expected_hash)
+        self.assertTrue(result.release_url.endswith("/releases/tags/v0.1.0"))
 
     def test_preferences_default_blank_and_persist_output_dir(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -539,6 +613,181 @@ class EmployeurDMegaGestTest(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("Soumis à VirusTotal : non", report_text)
+
+    def test_virustotal_detection_collection_keeps_blocking_results(self) -> None:
+        detections = collect_detections(
+            {
+                "CleanEngine": {"category": "undetected", "result": None},
+                "MaliciousEngine": {"category": "malicious", "result": "Static AI"},
+                "SuspiciousEngine": {"category": "suspicious", "result": "Packed"},
+            }
+        )
+
+        self.assertEqual([item["engine"] for item in detections], ["MaliciousEngine", "SuspiciousEngine"])
+
+    def test_virustotal_conflict_reads_existing_report(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "EmployeurD-MegaGest.exe"
+            executable.write_bytes(b"synthetic executable")
+            report = Path(directory) / "virustotal.md"
+            argv = [
+                "submit_virustotal.py",
+                "--file",
+                str(executable),
+                "--output",
+                str(report),
+                "--api-key",
+                "synthetic-key",
+                "--fail-on-detections",
+                "--no-dotenv",
+            ]
+            conflict = urllib.error.HTTPError("https://example.invalid/files", 409, "Conflict", {}, None)
+            with (
+                patch.object(sys, "argv", argv),
+                patch("scripts.submit_virustotal.get_upload_url", return_value="https://example.invalid/files"),
+                patch("scripts.submit_virustotal.post_file", side_effect=conflict),
+                patch(
+                    "scripts.submit_virustotal.get_file_report",
+                    return_value={"data": {"attributes": {"last_analysis_stats": {"malicious": 0, "suspicious": 0}}}},
+                ),
+            ):
+                exit_code = submit_virustotal.main()
+
+            report_text = report.read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Rapport VirusTotal existant consulté", report_text)
+
+    def test_release_manifest_validates_hashes_and_clean_virustotal_report(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            workdir = Path(directory)
+            dist = workdir / "dist"
+            app = dist / "EmployeurD-MegaGest"
+            app.mkdir(parents=True)
+            executable = app / "EmployeurD-MegaGest.exe"
+            portable = dist / "EmployeurD-MegaGest-v9.9.9-portable.zip"
+            executable.write_bytes(b"synthetic executable")
+            portable.write_bytes(b"synthetic portable zip")
+            exe_sha = generate_release_manifest.sha256_file(executable)
+            zip_sha = generate_release_manifest.sha256_file(portable)
+            (dist / "EmployeurD-MegaGest-v9.9.9-portable.exe.sha256").write_text(
+                f"{exe_sha}  EmployeurD-MegaGest.exe\n",
+                encoding="ascii",
+            )
+            (dist / "EmployeurD-MegaGest-v9.9.9-portable.zip.sha256").write_text(
+                f"{zip_sha}  EmployeurD-MegaGest-v9.9.9-portable.zip\n",
+                encoding="ascii",
+            )
+            (dist / "EmployeurD-MegaGest-v9.9.9.virustotal.md").write_text(
+                "\n".join(
+                    [
+                        "# Rapport VirusTotal",
+                        "- Soumis à VirusTotal : oui",
+                        "- Statut : terminé",
+                        "- malicious : 0",
+                        "- suspicious : 0",
+                        "- Lien : https://www.virustotal.com/gui/file/synthetic",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(root / "scripts" / "generate_release_manifest.py"),
+                    "--version",
+                    "9.9.9",
+                    "--require-clean-virustotal",
+                ],
+                cwd=workdir,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            manifest = json.loads((dist / "EmployeurD-MegaGest-v9.9.9.release-manifest.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(manifest["artifacts"][0]["sha256"], zip_sha)
+        self.assertEqual(manifest["artifacts"][1]["sha256"], exe_sha)
+        self.assertFalse(manifest["privacy"]["payroll_files_submitted"])
+
+    def test_release_manifest_blocks_virustotal_detections(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            workdir = Path(directory)
+            dist = workdir / "dist"
+            app = dist / "EmployeurD-MegaGest"
+            app.mkdir(parents=True)
+            executable = app / "EmployeurD-MegaGest.exe"
+            portable = dist / "EmployeurD-MegaGest-v9.9.9-portable.zip"
+            executable.write_bytes(b"synthetic executable")
+            portable.write_bytes(b"synthetic portable zip")
+            exe_sha = generate_release_manifest.sha256_file(executable)
+            zip_sha = generate_release_manifest.sha256_file(portable)
+            (dist / "EmployeurD-MegaGest-v9.9.9-portable.exe.sha256").write_text(f"{exe_sha}\n", encoding="ascii")
+            (dist / "EmployeurD-MegaGest-v9.9.9-portable.zip.sha256").write_text(f"{zip_sha}\n", encoding="ascii")
+            (dist / "EmployeurD-MegaGest-v9.9.9.virustotal.md").write_text(
+                "- malicious : 1\n- suspicious : 0\n",
+                encoding="utf-8",
+            )
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(root / "scripts" / "generate_release_manifest.py"),
+                    "--version",
+                    "9.9.9",
+                    "--require-clean-virustotal",
+                ],
+                cwd=workdir,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn("VirusTotal", completed.stdout)
+
+    def test_release_manifest_detects_unsigned_pe_without_powershell(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "unsigned.exe"
+            data = bytearray(512)
+            data[0:2] = b"MZ"
+            data[0x3C:0x40] = (0x80).to_bytes(4, "little")
+            data[0x80:0x84] = b"PE\0\0"
+            optional_header_offset = 0x80 + 24
+            data[optional_header_offset : optional_header_offset + 2] = (0x20B).to_bytes(2, "little")
+            executable.write_bytes(data)
+
+            status = generate_release_manifest.pe_certificate_status(executable)
+
+        self.assertEqual(status, "NotSigned")
+
+    def test_release_notes_include_public_virustotal_score(self) -> None:
+        section = append_release_verification.build_verification_section(
+            {
+                "distribution": {"signed": False, "authenticode_status": "NotSigned"},
+                "artifacts": [
+                    {"type": "portable_zip", "sha256": "zip-sha"},
+                    {"type": "windows_executable_inside_zip", "sha256": "exe-sha"},
+                ],
+            },
+            {
+                "status": "completed",
+                "malicious": 0,
+                "suspicious": 0,
+                "link": "https://www.virustotal.com/gui/file/example",
+            },
+            "EmployeurD-MegaGest-v9.9.9.virustotal.md",
+        )
+
+        self.assertIn("Score VirusTotal: `0 malicious / 0 suspicious`", section)
+        self.assertIn("Rapport détaillé: `EmployeurD-MegaGest-v9.9.9.virustotal.md`", section)
+        self.assertIn("SHA256 exécutable: `exe-sha`", section)
+        self.assertIn("Données de paie transmises pendant cette vérification: `non`", section)
 
 
 if __name__ == "__main__":

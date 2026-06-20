@@ -1,26 +1,26 @@
 # Sécurité
 
-L'application est conçue pour traiter les fichiers localement sur le poste de l'utilisateur.
+L'application travaille localement. Les fichiers de paie ne doivent jamais être publiés dans GitHub, joints à un billet public ou envoyés à un service externe.
 
-Aucun fichier de paie ne doit être publié dans GitHub, joint à un billet public ou transmis à un service externe.
+## À ne pas publier
 
-## À ne jamais publier
-
-- fichier TXT EmployeurD réel;
+- TXT EmployeurD réel;
 - rapport SPD réel;
 - fichier MND réel;
 - rapport Markdown ou JSON issu d'une paie réelle;
-- capture contenant des données de paie;
-- fichier `.env`, clé privée, certificat, jeton ou mot de passe.
+- capture contenant des données sensibles;
+- fichier `.env`, clé, jeton, certificat ou mot de passe.
 
-## VirusTotal
+## Versions officielles
 
-Seul l'exécutable public peut être soumis à VirusTotal.
+Téléchargez l'application depuis la page officielle des versions GitHub.
 
-Ne jamais soumettre de fichier EmployeurD, SPD, MND, Markdown ou JSON de validation.
+Chaque version publique doit fournir les empreintes SHA256. L'exécutable public peut aussi être accompagné d'un rapport VirusTotal.
 
-## Signaler une vulnérabilité
+La fenêtre `Sécurité` de l'application permet de comparer l'empreinte de la version ouverte avec l'empreinte publiée.
 
-Utiliser le signalement privé de vulnérabilité GitHub lorsque disponible.
+## Signaler un problème
 
-Pour un contact direct : services@mathieu.pro
+Pour une vulnérabilité, utilisez le signalement privé GitHub lorsque disponible.
+
+Contact direct : services@mathieu.pro

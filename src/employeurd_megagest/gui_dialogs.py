@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import hashlib
 import queue
-import subprocess
-import sys
 import threading
 import tkinter as tk
 import webbrowser
-from pathlib import Path
 from tkinter import ttk
 
 from .audit_log import default_log_dir
 from .gui_state import summary_text
 from .gui_texts import LEGAL_NOTICE_TEXT, SECURITY_NOTICE_TEXT, SUPPORT_EMAIL, SUPPORT_ISSUE_URL, Text
+from .integrity import IntegrityCheckResult, check_running_app_integrity, local_integrity_details
 from .models import ConversionResult
 from .platform_actions import open_folder, open_path
 from .update_check import UpdateCheckResult
@@ -32,16 +29,16 @@ def show_support_window(parent: tk.Tk) -> None:
             "Besoin d'aide?",
             "=============",
             "",
-            "Pour un problème reproductible ou une amélioration, privilégiez l'ouverture d'un billet GitHub. C'est le meilleur endroit pour suivre la demande et conserver le contexte.",
+            "Pour une question, un problème ou une amélioration, ouvrez de préférence un billet GitHub.",
             "",
             f"Courriel : {SUPPORT_EMAIL}",
             "",
-            "Important",
-            "=========",
+            "À ne pas joindre",
+            "================",
             "",
-            "Ne joignez jamais de fichier de paie réel, de rapport SPD réel, de MND réel, de rapport Markdown, de JSON de validation ou de capture contenant des données sensibles.",
+            "Ne joignez jamais de fichier de paie réel, de rapport SPD réel, de MND réel ou de capture contenant des données sensibles.",
             "",
-            "Pour aider au diagnostic, indiquez seulement la version de l'application, l'étape concernée et le message affiché.",
+            "Indiquez seulement la version de l'application, l'étape concernée et le message affiché.",
         ]
     )
     text = _text_block(dialog, content)
@@ -78,6 +75,7 @@ def show_security_window(
     parent: tk.Tk,
     *,
     update_check_on_startup: bool,
+    update_url: str,
     on_toggle_startup,
 ) -> None:
     dialog = _dialog(parent, "Sécurité", "720x520")
@@ -93,7 +91,15 @@ def show_security_window(
     )
     check.grid(row=1, column=0, sticky="w", padx=16, pady=(0, 8))
 
-    _button_row(dialog, [("Ouvrir les logs", lambda: open_folder(default_log_dir())), (Text.close, dialog.destroy)], row=2)
+    _button_row(
+        dialog,
+        [
+            ("Vérifier la version ouverte", lambda: _load_integrity_check(dialog, text, update_url)),
+            ("Ouvrir les logs", lambda: open_folder(default_log_dir())),
+            (Text.close, dialog.destroy),
+        ],
+        row=2,
+    )
     _load_security_details(dialog, text)
 
 
@@ -106,17 +112,17 @@ def show_update_result(parent: tk.Tk, result: UpdateCheckResult) -> None:
         f"État : {result.message}",
         f"SHA256 attendu : {result.sha256 or 'n/d'}",
         "",
-        "Aucun fichier de paie n'a été transmis pendant cette vérification.",
+        "Aucun fichier de paie n'est envoyé pendant cette vérification.",
     ]
     if result.release_notes:
         body.extend(["", "Notes de version", "================", result.release_notes])
     if not result.ok:
-        body.append("L'utilitaire demeure utilisable hors ligne.")
+        body.append("L'application peut quand même être utilisée.")
     text = _text_block(dialog, "\n".join(body))
     text.grid(row=0, column=0, sticky="nsew", padx=16, pady=(16, 10))
     actions = []
     if result.download_url:
-        actions.append(("Ouvrir la mise en ligne", lambda: webbrowser.open(result.download_url or "")))
+        actions.append(("Ouvrir la page de version", lambda: webbrowser.open(result.download_url or "")))
     actions.append((Text.close, dialog.destroy))
     _button_row(dialog, actions)
 
@@ -191,7 +197,7 @@ def _security_intro_text() -> str:
             "",
             "Informations de l'exécutable",
             "============================",
-            "Calcul en cours... La fenêtre demeure utilisable pendant la vérification.",
+            "Lecture locale en cours...",
         ]
     )
 
@@ -200,7 +206,7 @@ def _load_security_details(dialog: tk.Toplevel, text: tk.Text) -> None:
     result_queue: queue.Queue[str] = queue.Queue()
 
     def worker() -> None:
-        result_queue.put(_security_details_text())
+        result_queue.put(_format_integrity_result(local_integrity_details()))
 
     def poll() -> None:
         try:
@@ -210,19 +216,55 @@ def _load_security_details(dialog: tk.Toplevel, text: tk.Text) -> None:
                 dialog.after(75, poll)
             return
         if dialog.winfo_exists():
-            _replace_text(text, _security_intro_text().replace("Calcul en cours... La fenêtre demeure utilisable pendant la vérification.", details))
+            _replace_text(text, _security_intro_text().replace("Lecture locale en cours...", details))
 
     threading.Thread(target=worker, daemon=True).start()
     dialog.after(75, poll)
 
 
-def _security_details_text() -> str:
-    executable = Path(sys.executable)
+def _load_integrity_check(dialog: tk.Toplevel, text: tk.Text, update_url: str) -> None:
+    _replace_text(
+        text,
+        _security_intro_text().replace(
+            "Lecture locale en cours...",
+            "Comparaison avec la version GitHub en cours...",
+        ),
+    )
+    result_queue: queue.Queue[IntegrityCheckResult] = queue.Queue()
+
+    def worker() -> None:
+        result_queue.put(check_running_app_integrity(update_url))
+
+    def poll() -> None:
+        try:
+            result = result_queue.get_nowait()
+        except queue.Empty:
+            if dialog.winfo_exists():
+                dialog.after(100, poll)
+            return
+        if dialog.winfo_exists():
+            _replace_text(
+                text,
+                _security_intro_text().replace(
+                    "Lecture locale en cours...",
+                    _format_integrity_result(result),
+                ),
+            )
+
+    threading.Thread(target=worker, daemon=True).start()
+    dialog.after(100, poll)
+
+
+def _format_integrity_result(result: IntegrityCheckResult) -> str:
     lines = [
-        f"Exécutable : {executable.name}",
-        f"SHA256 exécutable : {_sha256_file(executable) or 'n/d'}",
-        f"Signature : {_signature_status(executable)}",
+        f"État : {result.message}",
+        f"Exécutable : {result.executable_path.name}",
+        f"SHA256 local : {result.local_sha256 or 'n/d'}",
+        f"SHA256 officiel : {result.expected_sha256 or 'n/d'}",
+        f"Signature Windows : {result.signature_status}",
     ]
+    if result.release_url:
+        lines.append(f"Version GitHub : {result.release_url}")
     return "\n".join(lines)
 
 
@@ -231,36 +273,3 @@ def _replace_text(widget: tk.Text, value: str) -> None:
     widget.delete("1.0", "end")
     widget.insert("1.0", value)
     widget.configure(state="disabled")
-
-
-def _sha256_file(path: Path) -> str | None:
-    try:
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return digest.hexdigest()
-    except OSError:
-        return None
-
-
-def _signature_status(path: Path) -> str:
-    if not sys.platform.startswith("win"):
-        return "Non applicable"
-    try:
-        completed = subprocess.run(
-            [
-                "powershell",
-                "-NoProfile",
-                "-Command",
-                f"(Get-AuthenticodeSignature -LiteralPath {str(path)!r}).Status",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return "Non vérifiée"
-    status = completed.stdout.strip()
-    return status or "Non vérifiée"

@@ -9,6 +9,7 @@ param(
     [switch]$CreateGitHubRelease,
     [switch]$PublishNow,
     [switch]$SubmitVirusTotal,
+    [switch]$AllowVirusTotalDetections,
     [string]$VirusTotalApiKey = "",
     [int]$VirusTotalWaitMinutes = 10
 )
@@ -49,17 +50,21 @@ Write-Host "Mise en ligne préparée pour v$ReleaseVersion"
 .\scripts\release.ps1 -Version $ReleaseVersion -AllowDirty
 
 $Name = "EmployeurD-MegaGest"
-$Exe = "dist/$Name-v$ReleaseVersion.exe"
+$PortableExe = "dist/$Name/$Name.exe"
+$PortableZip = "dist/$Name-v$ReleaseVersion-portable.zip"
 $VirusTotalReport = "dist/$Name-v$ReleaseVersion.virustotal.md"
 
 if ($SubmitVirusTotal) {
     $VtArgs = @(
         "scripts/submit_virustotal.py",
-        "--file", $Exe,
+        "--file", $PortableExe,
         "--output", $VirusTotalReport,
         "--wait-minutes", "$VirusTotalWaitMinutes",
         "--require-submit"
     )
+    if (-not $AllowVirusTotalDetections) {
+        $VtArgs += "--fail-on-detections"
+    }
     if ($VirusTotalApiKey) {
         $VtArgs += @("--api-key", $VirusTotalApiKey)
     }
@@ -67,6 +72,28 @@ if ($SubmitVirusTotal) {
     Assert-LastExitCode "Soumission VirusTotal impossible"
 } else {
     Write-Host "VirusTotal non soumis. Relance avec -SubmitVirusTotal et VT_API_KEY pour produire le rapport final."
+    if ($CreateGitHubRelease) {
+        throw "La création d'une mise en ligne GitHub exige -SubmitVirusTotal."
+    }
+}
+
+if ($CreateGitHubRelease -and $AllowVirusTotalDetections) {
+    throw "Une mise en ligne GitHub officielle ne peut pas ignorer les détections VirusTotal."
+}
+
+if ($SubmitVirusTotal) {
+    $ManifestArgs = @(
+        "scripts/generate_release_manifest.py",
+        "--version", $ReleaseVersion
+    )
+    if (-not $AllowVirusTotalDetections) {
+        $ManifestArgs += "--require-clean-virustotal"
+    }
+    python @ManifestArgs
+    Assert-LastExitCode "Génération du manifeste de mise en ligne impossible"
+
+    python scripts/append_release_verification.py --version $ReleaseVersion
+    Assert-LastExitCode "Ajout du score VirusTotal aux notes de mise en ligne impossible"
 }
 
 if ($CommitVersion) {
@@ -106,16 +133,20 @@ if ($CreateGitHubRelease) {
     if (-not $Push) {
         throw "Ajoute -Push pour envoyer la branche et le tag avant de créer la mise en ligne GitHub."
     }
+    if (-not (Test-Path $VirusTotalReport)) {
+        throw "Rapport VirusTotal manquant: $VirusTotalReport"
+    }
     $ReleaseArgs = @(
         "release", "create", $Tag,
         "--title", "EmployeurD-MegaGest v$ReleaseVersion",
         "--notes-file", "dist/$Name-v$ReleaseVersion.release-notes.md",
-        "dist/$Name-v$ReleaseVersion.exe",
-        "dist/$Name-v$ReleaseVersion.exe.sha256",
-        "dist/$Name-v$ReleaseVersion.zip",
+        $PortableZip,
+        "$PortableZip.sha256",
+        "dist/$Name-v$ReleaseVersion-portable.exe.sha256",
         "dist/$Name-v$ReleaseVersion.sbom.json",
         "dist/$Name-v$ReleaseVersion.security.md",
-        "dist/$Name-v$ReleaseVersion.virustotal.md"
+        "dist/$Name-v$ReleaseVersion.virustotal.md",
+        "dist/$Name-v$ReleaseVersion.release-manifest.json"
     )
     if (-not $PublishNow) {
         $ReleaseArgs = @("release", "create", $Tag, "--draft") + $ReleaseArgs[3..($ReleaseArgs.Length - 1)]

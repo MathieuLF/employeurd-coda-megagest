@@ -1,18 +1,18 @@
-# Formats de fichiers
+# Formats des fichiers
 
-Cette page décrit seulement les champs utilisés par l'application.
+Cette page résume la structure attendue par l'application.
 
 ## TXT EmployeurD
 
 Une ligne contient 77 caractères, sans compter la fin de ligne.
 
-| Position | Longueur | Contenu |
+| Positions | Longueur | Contenu |
 | --- | ---: | --- |
 | 1-8 | 8 | Lot EmployeurD |
 | 9 | 1 | Espace |
 | 10-20 | 11 | Compte GL EmployeurD |
-| 21-69 | 49 | Montant, aligné à droite, négatif si crédit |
-| 70-77 | 8 | Date d'écriture, format `AAAAMMJJ` |
+| 21-69 | 49 | Montant |
+| 70-77 | 8 | Date, format `AAAAMMJJ` |
 
 Exemple synthétique :
 
@@ -24,31 +24,24 @@ Exemple synthétique :
 
 Une ligne MND produite contient 479 caractères, sans compter la fin de ligne `CRLF`.
 
-| Position | Longueur | Contenu |
+| Positions | Longueur | Contenu |
 | --- | ---: | --- |
 | 1 | 1 | Type, toujours `P` |
 | 2-11 | 10 | Compte MND |
-| 12-16 | 5 | Espaces |
-| 17-22 | 6 | Période, format `AAAAMM` |
-| 23-52 | 30 | Espaces |
+| 17-22 | 6 | Période `AAAAMM` |
 | 53-62 | 10 | Référence |
-| 63-70 | 8 | Date, format `AAAAMMJJ` |
-| 71-120 | 50 | Libellé source |
-| 121-235 | 115 | Champ auxiliaire |
-| 236-248 | 13 | Débit, format `0000000000.00` |
-| 249 | 1 | Espace |
-| 250-262 | 13 | Crédit, format `0000000000.00` |
-| 263 | 1 | Espace |
+| 63-70 | 8 | Date `AAAAMMJJ` |
+| 71-120 | 50 | Libellé |
+| 236-248 | 13 | Débit |
+| 250-262 | 13 | Crédit |
 | 264-269 | 6 | Lot MND |
-| 270-273 | 4 | Espaces |
-| 274-281 | 8 | Date 2, format `AAAAMMJJ` |
-| 282-479 | 198 | Espaces |
+| 274-281 | 8 | Date `AAAAMMJJ` |
 
-## Conversion du compte
+Les autres positions sont remplies par des espaces.
 
-Par défaut, l'application retire le premier chiffre du compte EmployeurD de 11 chiffres pour produire le compte MND de 10 chiffres.
+## Compte
 
-Exemple :
+Par défaut, l'application retire le premier chiffre du compte EmployeurD de 11 chiffres.
 
 ```text
 50213000140 -> 0213000140

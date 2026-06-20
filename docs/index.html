@@ -3,144 +3,88 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>EmployeurD-MegaGest | TXT EmployeurD vers MND MégaGest</title>
-  <meta name="description" content="Utilitaire Windows local pour transformer une écriture détaillée EmployeurD en fichier MND MégaGest, avec validation des totaux et rapprochement SPD640-P optionnel.">
+  <title>EmployeurD-MegaGest</title>
+  <meta name="description" content="Utilitaire Windows pour préparer un fichier MND MégaGest à partir d'une écriture détaillée EmployeurD.">
+  <link rel="icon" href="assets/product-icon.png" type="image/png">
   <link rel="stylesheet" href="assets/site.css">
 </head>
 <body>
   <header class="site-header">
     <a class="brand" href="#top" aria-label="Accueil EmployeurD-MegaGest">
-      <span class="brand-mark" aria-hidden="true">E</span>
+      <img src="assets/product-icon.png" alt="" aria-hidden="true">
       <span>EmployeurD-MegaGest</span>
     </a>
     <nav aria-label="Navigation principale">
-      <a href="#sequence">Séquence</a>
-      <a href="#controles">Contrôles</a>
+      <a href="#fonctionnement">Fonctionnement</a>
       <a href="#securite">Sécurité</a>
       <a href="#support">Support</a>
-      <a href="https://github.com/MathieuLF/employeurd-coda-megagest">GitHub</a>
+      <a class="download" href="https://github.com/MathieuLF/employeurd-coda-megagest/releases">Télécharger</a>
     </nav>
   </header>
 
   <main id="top">
-    <section class="hero" aria-labelledby="hero-title">
-      <img class="hero-image" src="assets/screenshots/v0.1.0/app-main.png" alt="Interface EmployeurD-MegaGest avec une écriture EmployeurD, un rapport SPD640-P et une sortie MND">
-      <div class="hero-shade" aria-hidden="true"></div>
-      <div class="hero-content">
-        <p class="eyebrow">Pour les équipes de paie et finances</p>
-        <h1 id="hero-title">EmployeurD-MegaGest</h1>
-        <p class="hero-copy">Convertir une écriture détaillée EmployeurD en fichier MND MégaGest, avec des contrôles clairs avant de créer le fichier final.</p>
-        <div class="hero-actions">
-          <a class="button primary" href="https://github.com/MathieuLF/employeurd-coda-megagest/releases">Voir les versions</a>
-          <a class="button secondary" href="#sequence">Voir la séquence</a>
+    <section class="intro">
+      <div class="intro-copy">
+        <p class="tag">Utilitaire Windows</p>
+        <h1>Créer un MND à partir d'une écriture EmployeurD.</h1>
+        <p>Un outil simple pour préparer l'import de paie dans MégaGest, avec validation des soldes avant la création du fichier final.</p>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/MathieuLF/employeurd-coda-megagest/releases">Télécharger la dernière version</a>
+          <a class="button secondary" href="https://github.com/MathieuLF/employeurd-coda-megagest/issues/new/choose">Demander du support</a>
         </div>
-        <dl class="hero-facts" aria-label="Résumé du logiciel">
-          <div>
-            <dt>Entrée</dt>
-            <dd>TXT EmployeurD</dd>
-          </div>
-          <div>
-            <dt>Sortie</dt>
-            <dd>MND MégaGest</dd>
-          </div>
-          <div>
-            <dt>Appui</dt>
-            <dd>SPD640-P optionnel</dd>
-          </div>
-        </dl>
       </div>
+      <figure class="screen">
+        <img src="assets/screenshots/v0.1.0/app-main.png" alt="Aperçu de l'application EmployeurD-MegaGest">
+        <figcaption>Capture avec données synthétiques.</figcaption>
+      </figure>
     </section>
 
-    <section class="band intro" id="sequence">
-      <div class="section-heading">
-        <p class="eyebrow">Séquence guidée</p>
-        <h2>Une conversion qui reste lisible du début à la fin.</h2>
-        <p>Pas besoin de manipuler des commandes. L'application accompagne le choix des fichiers, la validation, puis la création du MND dans un dossier horodaté.</p>
+    <section class="section" id="fonctionnement">
+      <div class="section-title">
+        <p class="tag">En pratique</p>
+        <h2>Trois étapes.</h2>
       </div>
-      <div class="steps" aria-label="Étapes d'utilisation">
+      <div class="steps">
         <article>
-          <span>1</span>
-          <h3>Ajouter l'écriture</h3>
-          <p>Sélectionner l'écriture détaillée standard de EmployeurD, au format TXT.</p>
+          <strong>1. Ajouter le TXT</strong>
+          <p>Choisir l'écriture détaillée standard de EmployeurD.</p>
         </article>
         <article>
-          <span>2</span>
-          <h3>Confirmer les soldes</h3>
-          <p>Joindre le SPD640-P au besoin pour corroborer les totaux débit et crédit.</p>
+          <strong>2. Confirmer les totaux</strong>
+          <p>Ajouter le SPD640-P au besoin pour corroborer les soldes.</p>
         </article>
         <article>
-          <span>3</span>
-          <h3>Créer le MND</h3>
-          <p>Produire le fichier seulement lorsque les validations obligatoires sont conformes.</p>
+          <strong>3. Créer le MND</strong>
+          <p>Générer le fichier seulement lorsque les validations sont conformes.</p>
         </article>
       </div>
     </section>
 
-    <section class="showcase" aria-labelledby="showcase-title">
-      <div class="showcase-inner">
-        <div class="showcase-copy">
-          <p class="eyebrow">Aperçu</p>
-          <h2 id="showcase-title">Tout ce qui compte tient dans le même écran.</h2>
-          <p>L'utilisateur voit l'écriture EmployeurD, le rapport SPD640-P, les choix de sortie, le résumé et le journal sans chercher dans des fichiers techniques.</p>
-        </div>
-        <figure class="product-shot">
-          <img src="assets/screenshots/v0.1.0/app-main.png" alt="Capture de l'application EmployeurD-MegaGest">
-          <figcaption>Capture synthétique de la version 0.1.0, sans données de paie réelles.</figcaption>
-        </figure>
+    <section class="section split" id="securite">
+      <div>
+        <p class="tag">Sécurité</p>
+        <h2>Les fichiers de paie restent sur le poste.</h2>
+      </div>
+      <div>
+        <p>L'application ne transmet pas les fichiers EmployeurD, SPD640-P, MND, Markdown ou JSON. Les versions officielles sont publiées avec des empreintes SHA256 et un rapport VirusTotal de l'exécutable.</p>
+        <p>Les exemples du dépôt sont synthétiques. Aucun fichier réel ne doit être joint à un billet public.</p>
       </div>
     </section>
 
-    <section class="band checks" id="controles">
-      <div class="section-heading">
-        <p class="eyebrow">Contrôles intégrés</p>
-        <h2>Le fichier final n'est pas créé si un écart bloquant apparaît.</h2>
-        <p>Le but n'est pas seulement de convertir. C'est de produire un fichier que l'on peut vérifier calmement avant de le tester dans MégaGest.</p>
-      </div>
-      <div class="check-grid">
-        <article>
-          <h3>Écriture EmployeurD</h3>
-          <p>Longueur fixe, date, montant, lot, comptes et équilibre débit/crédit.</p>
-        </article>
-        <article>
-          <h3>MND relu</h3>
-          <p>Le MND généré est relu et ses propres totaux sont comparés au fichier source.</p>
-        </article>
-        <article>
-          <h3>SPD640-P</h3>
-          <p>Lorsque le rapport est fourni, ses totaux peuvent confirmer les soldes de la paie.</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="security" id="securite">
-      <div class="security-inner">
-        <div>
-          <p class="eyebrow">Données sensibles</p>
-          <h2>Les fichiers de paie restent sur le poste.</h2>
-        </div>
-        <div class="security-copy">
-          <p>L'application ne téléverse pas les fichiers EmployeurD, SPD640-P, MND, Markdown ou JSON. La vérification de mise à jour consulte GitHub sans transmettre de données de paie.</p>
-          <p>Les exemples publiés dans le dépôt sont synthétiques. Aucun fichier réel ne doit être joint à un billet public.</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="band support" id="support">
-      <div class="support-panel">
-        <p class="eyebrow">Support</p>
-        <h2>Un problème, une question ou une amélioration?</h2>
-        <p>Le plus simple est d'ouvrir un billet GitHub avec la version de l'application, l'étape concernée et le message affiché. Pour un contact direct : <a href="mailto:services@mathieu.pro">services@mathieu.pro</a>.</p>
-        <div class="support-actions">
-          <a class="button primary" href="https://github.com/MathieuLF/employeurd-coda-megagest/issues/new/choose">Ouvrir un billet GitHub</a>
-          <a class="button secondary" href="mailto:services@mathieu.pro">Écrire un courriel</a>
-        </div>
+    <section class="section support" id="support">
+      <p class="tag">Support</p>
+      <h2>Besoin d'aide?</h2>
+      <p>Ouvrez un billet GitHub avec la version de l'application, l'étape concernée et le message affiché. Pour un contact direct : <a href="mailto:services@mathieu.pro">services@mathieu.pro</a>.</p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/MathieuLF/employeurd-coda-megagest/issues/new/choose">Ouvrir un billet</a>
+        <a class="button secondary" href="mailto:services@mathieu.pro">Écrire un courriel</a>
       </div>
     </section>
   </main>
 
   <footer>
     <p>© 2026 Mathieu Lapointe-Fiset. EmployeurD, PG Solutions, MégaGest et les autres marques citées appartiennent à leurs propriétaires respectifs.</p>
-    <p><a href="https://github.com/MathieuLF/employeurd-coda-megagest/blob/main/docs/mentions_legales.md">Mentions légales</a> · <a href="https://github.com/MathieuLF/employeurd-coda-megagest/blob/main/SECURITY.md">Sécurité</a> · <a href="https://github.com/MathieuLF/employeurd-coda-megagest">Dépôt GitHub</a></p>
+    <p><a href="https://github.com/MathieuLF/employeurd-coda-megagest">Dépôt GitHub</a> · <a href="mentions_legales.md">Mentions légales</a></p>
   </footer>
 </body>
 </html>

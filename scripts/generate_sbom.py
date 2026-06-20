@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import platform
 import sys
+from importlib import metadata
 from argparse import ArgumentParser
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +22,20 @@ def main() -> int:
 
     output = Path("dist") / f"EmployeurD-MegaGest-v{__version__}.sbom.json"
     output.parent.mkdir(parents=True, exist_ok=True)
+    components = [
+        {
+            "type": "framework",
+            "name": "Python",
+            "version": platform.python_version(),
+        }
+    ]
+    for package_name in ("cx_Freeze", "freeze-core", "lief", "filelock", "cabarchive", "striprtf"):
+        try:
+            package_version = metadata.version(package_name)
+        except metadata.PackageNotFoundError:
+            continue
+        components.append({"type": "library", "name": package_name, "version": package_version})
+
     payload = {
         "bomFormat": "CycloneDX",
         "specVersion": "1.5",
@@ -34,13 +49,7 @@ def main() -> int:
                 "version": __version__,
             },
         },
-        "components": [
-            {
-                "type": "framework",
-                "name": "Python",
-                "version": platform.python_version(),
-            }
-        ],
+        "components": components,
     }
     output.write_text(json.dumps(payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
     print(output)

@@ -4,6 +4,13 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
+.venv/
+.venv-*/
+venv/
+ENV/
+.coverage
+htmlcov/
+.playwright-cli/
 
 .env
 .env.*
@@ -18,6 +25,7 @@ __pycache__/
 *.der
 secrets/
 credentials/
+notes-privees/
 
 outputs/
 logs/

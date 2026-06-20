@@ -32,7 +32,7 @@ from .gui_texts import (
 from .gui_theme import Palette, configure_theme, status_colors
 from .platform_actions import open_folder
 from .preferences import load_preferences, remember_output_dir, remember_update_check_on_startup
-from .resource_paths import default_config_dir
+from .resource_paths import default_config_dir, package_asset_path
 from .update_check import UpdateCheckResult, check_for_update
 from .user_messages import friendly_error_message, technical_error_message
 from .version import __version__
@@ -155,6 +155,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         self.title(f"EmployeurD-MegaGest {__version__}")
         self.geometry("1180x760")
         self.minsize(900, 560)
+        self._set_product_icon()
 
         self.controller = GuiController(config_dir=default_config_dir())
         self.preferences = load_preferences()
@@ -183,6 +184,16 @@ class EmployeurDMegaGestApp(tk.Tk):
 
         if self.preferences.update_check_on_startup:
             self.after(750, lambda: self._check_update(show_dialog=False))
+
+    def _set_product_icon(self) -> None:
+        icon_path = package_asset_path("app-icon.png")
+        if not icon_path.exists():
+            return
+        try:
+            self._window_icon = tk.PhotoImage(file=str(icon_path))
+            self.iconphoto(True, self._window_icon)
+        except tk.TclError:
+            pass
 
     def _build_ui(self) -> None:
         self.columnconfigure(0, weight=1)
@@ -567,9 +578,11 @@ class EmployeurDMegaGestApp(tk.Tk):
             open_folder(output)
 
     def _show_security(self) -> None:
+        config = load_app_config(default_config_dir())
         show_security_window(
             self,
             update_check_on_startup=self.preferences.update_check_on_startup,
+            update_url=str(config.updates.get("url", "")),
             on_toggle_startup=self._set_update_check_on_startup,
         )
 
@@ -598,7 +611,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         elif result.ok:
             if not self.last_result:
                 self.status.set("Application à jour")
-                self.status_detail.set("Aucune mise à jour disponible. L'outil demeure utilisable hors ligne.")
+                self.status_detail.set("Aucune mise à jour disponible.")
             self.update_status.set("Application à jour")
             self.update_button.configure(text=Text.up_to_date)
             self._log_event("Vérification terminée : application à jour.")

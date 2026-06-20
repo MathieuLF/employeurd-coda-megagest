@@ -26,6 +26,7 @@ def main() -> int:
     parser.add_argument("--require-submit", action="store_true")
     parser.add_argument("--lookup-only", action="store_true", help="Consulte le rapport VirusTotal existant sans envoyer le fichier.")
     parser.add_argument("--no-dotenv", action="store_true", help="Ne charge pas le fichier .env local.")
+    parser.add_argument("--fail-on-detections", action="store_true", help="Échoue si VirusTotal retourne une détection malicious ou suspicious.")
     args = parser.parse_args()
 
     if not args.no_dotenv:
@@ -48,11 +49,17 @@ def main() -> int:
     try:
         analysis_id = ""
         analysis: dict[str, Any] = {}
+        already_present = False
         if not args.lookup_only:
             upload_url = get_upload_url(api_key) if file_path.stat().st_size >= SMALL_FILE_LIMIT else f"{API_ROOT}/files"
-            upload_payload = post_file(upload_url, api_key, file_path)
-            analysis_id = upload_payload.get("data", {}).get("id", "")
-            analysis = poll_analysis(api_key, analysis_id, wait_minutes=args.wait_minutes, poll_seconds=args.poll_seconds) if analysis_id else {}
+            try:
+                upload_payload = post_file(upload_url, api_key, file_path)
+                analysis_id = upload_payload.get("data", {}).get("id", "")
+                analysis = poll_analysis(api_key, analysis_id, wait_minutes=args.wait_minutes, poll_seconds=args.poll_seconds) if analysis_id else {}
+            except urllib.error.HTTPError as error:
+                if error.code != 409:
+                    raise
+                already_present = True
         file_report = get_file_report(api_key, sha256)
     except Exception as error:
         write_report(
@@ -69,8 +76,11 @@ def main() -> int:
     file_attributes = file_report.get("data", {}).get("attributes", {}) if isinstance(file_report, dict) else {}
     stats = attributes.get("stats") or file_attributes.get("last_analysis_stats", {})
     detections = collect_detections(file_attributes.get("last_analysis_results", {}))
-    status = attributes.get("status") or ("rapport consulté" if args.lookup_only else "soumis")
-    message = f"Analyse VirusTotal: {analysis_id or 'n/d'}" if not args.lookup_only else "Rapport VirusTotal existant consulté."
+    status = attributes.get("status") or ("rapport consulté" if args.lookup_only or already_present else "soumis")
+    if args.lookup_only or already_present:
+        message = "Rapport VirusTotal existant consulté."
+    else:
+        message = f"Analyse VirusTotal: {analysis_id or 'n/d'}"
     write_report(
         args.output,
         file_path=file_path,
@@ -81,6 +91,8 @@ def main() -> int:
         stats=stats if isinstance(stats, dict) else {},
         detections=detections,
     )
+    if args.fail_on_detections and detections:
+        return 4
     return 0
 
 
