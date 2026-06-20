@@ -277,6 +277,40 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertEqual(totals.other_totals["type_g_montants"], Decimal("1250.50"))
         self.assertEqual(totals.other_totals["type_d_montants"], Decimal("100.00"))
 
+    def test_each_synthetic_txt_has_matching_spd640_csv(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        config = self.config()
+        samples = root / "samples"
+        pairs = (
+            (
+                "employeurd-balanced.txt",
+                "OPD_RP_00001234_SPD640-P_EMPLOYEURD-BALANCED_SYNTHETIQUE.CSV",
+                True,
+            ),
+            (
+                "employeurd-unbalanced.txt",
+                "OPD_RP_00001234_SPD640-P_EMPLOYEURD-UNBALANCED_SYNTHETIQUE.CSV",
+                False,
+            ),
+            (
+                "employeurd-unknown-account.txt",
+                "OPD_RP_00001234_SPD640-P_EMPLOYEURD-UNKNOWN-ACCOUNT_SYNTHETIQUE.CSV",
+                True,
+            ),
+            (
+                "employeurd-zero-amount.txt",
+                "OPD_RP_00001234_SPD640-P_EMPLOYEURD-ZERO-AMOUNT_SYNTHETIQUE.CSV",
+                True,
+            ),
+        )
+
+        for source_name, report_name, should_match in pairs:
+            with self.subTest(source=source_name, report=report_name):
+                entries = parse_employeurd_file(samples / source_name)
+                reconciliation = reconcile_spd640(entries, samples / report_name, config, required=True)
+
+                self.assertEqual(reconciliation.status == "success", should_match)
+
     def test_reconcile_spd640_with_source_totals(self) -> None:
         root = Path(__file__).resolve().parents[1]
         config = self.config()

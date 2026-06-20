@@ -202,7 +202,7 @@ h2 {
 .release-card dl {
   display: grid;
   gap: 14px;
-  margin: 0 0 18px;
+  margin: 0 0 12px;
 }
 
 .release-card dt {
@@ -237,12 +237,12 @@ h2 {
 .release-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 14px;
-  margin-top: 4px;
+  gap: 10px 18px;
+  margin-top: 14px;
 }
 
 .release-note {
-  margin: 14px 0 0;
+  margin: 12px 0 0;
   color: var(--muted);
   font-size: 0.9rem;
 }

@@ -1,0 +1,30 @@
+name: Amélioration
+description: Proposer une amélioration simple de l'application ou de la documentation.
+title: "[Amélioration] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de décrire le besoin sans joindre de données de paie réelles.
+  - type: textarea
+    id: besoin
+    attributes:
+      label: Besoin
+      description: Quel problème cette amélioration réglerait-elle?
+      placeholder: Ce serait plus clair si...
+    validations:
+      required: true
+  - type: textarea
+    id: proposition
+    attributes:
+      label: Proposition
+      description: Décrivez le changement souhaité.
+    validations:
+      required: false
+  - type: checkboxes
+    id: confidentialite
+    attributes:
+      label: Confidentialité
+      options:
+        - label: Je n'ai inclus aucune donnée de paie réelle ni aucun secret.
+          required: true

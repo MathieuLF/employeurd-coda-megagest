@@ -1,0 +1,43 @@
+name: Aide
+description: Demander de l'aide pour utiliser l'application.
+title: "[Aide] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Pour les questions publiques, utilisez seulement des exemples synthétiques. N'ajoutez jamais de fichier de paie réel, de rapport SPD réel ou de MND réel.
+  - type: dropdown
+    id: etape
+    attributes:
+      label: Étape concernée
+      options:
+        - Ajouter l'écriture TXT
+        - Ajouter le SPD640-P
+        - Vérifier la paie
+        - Créer le MND
+        - Vérifier la version
+        - Autre
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: Expliquez ce que vous essayez de faire.
+      placeholder: Je veux comprendre pourquoi...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: Exemple : 0.1.0
+    validations:
+      required: false
+  - type: checkboxes
+    id: confidentialite
+    attributes:
+      label: Confidentialité
+      options:
+        - label: Je n'ai inclus aucune donnée de paie réelle ni aucun secret.
+          required: true

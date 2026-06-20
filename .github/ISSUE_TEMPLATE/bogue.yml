@@ -1,0 +1,45 @@
+name: Signalement de bogue
+description: Signaler un comportement qui ne fonctionne pas comme prévu.
+title: "[Bogue] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de ne joindre aucun fichier de paie réel, rapport SPD réel, MND réel, secret ou capture contenant des données sensibles.
+  - type: textarea
+    id: probleme
+    attributes:
+      label: Ce qui se passe
+      description: Décrivez le problème en mots simples.
+      placeholder: L'application affiche..., le MND n'est pas créé..., le message indique...
+    validations:
+      required: true
+  - type: textarea
+    id: etapes
+    attributes:
+      label: Étapes pour reproduire
+      description: Indiquez les actions, sans données réelles.
+      placeholder: 1. Ajouter un TXT synthétique; 2. Ajouter un SPD640-P synthétique; 3. Cliquer sur Vérifier la paie...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: Exemple : 0.1.0
+    validations:
+      required: false
+  - type: textarea
+    id: message
+    attributes:
+      label: Message affiché
+      description: Copiez le message exact si possible, sans chemin personnel ni donnée sensible.
+    validations:
+      required: false
+  - type: checkboxes
+    id: confidentialite
+    attributes:
+      label: Confidentialité
+      options:
+        - label: Je n'ai inclus aucune donnée de paie réelle ni aucun secret.
+          required: true
