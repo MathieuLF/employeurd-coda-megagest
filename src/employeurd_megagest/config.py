@@ -66,20 +66,8 @@ class SPD640Config:
 
 
 @dataclass(frozen=True)
-class SPD681Config:
-    enabled: bool = True
-    mode: str = "advisory"
-    tolerance: Decimal = Decimal("0.00")
-    require_matching_batch: bool = True
-    require_matching_period: bool = True
-    require_matching_date: bool = False
-    warn_on_reported_differences: bool = True
-
-
-@dataclass(frozen=True)
 class ReportsConfig:
     spd640: SPD640Config
-    spd681: SPD681Config
 
 
 @dataclass(frozen=True)
@@ -147,7 +135,6 @@ def load_app_config(config_dir: Path) -> AppConfig:
 def _load_reports_config(data: dict[str, Any]) -> ReportsConfig:
     root = _as_dict(data.get("reports", {}), "reports")
     spd640_root = _as_dict(root.get("spd640", {}), "reports.spd640")
-    spd681_root = _as_dict(root.get("spd681", {}), "reports.spd681")
     default_total = ReportTotalConfig(
         label="TYPE=G / MONTANTS",
         components=(ReportComponentConfig(type="G", field="MONTANTS"),),
@@ -162,15 +149,6 @@ def _load_reports_config(data: dict[str, Any]) -> ReportsConfig:
             require_matching_date=_as_bool(spd640_root.get("require_matching_date", False)),
             debit_total=_load_report_total(spd640_root.get("debit_total"), default_total, "debit_total"),
             credit_total=_load_report_total(spd640_root.get("credit_total"), default_total, "credit_total"),
-        ),
-        spd681=SPD681Config(
-            enabled=_as_bool(spd681_root.get("enabled", True)),
-            mode=str(spd681_root.get("mode", "advisory")),
-            tolerance=_as_decimal(spd681_root.get("tolerance", "0.00")),
-            require_matching_batch=_as_bool(spd681_root.get("require_matching_batch", True)),
-            require_matching_period=_as_bool(spd681_root.get("require_matching_period", True)),
-            require_matching_date=_as_bool(spd681_root.get("require_matching_date", False)),
-            warn_on_reported_differences=_as_bool(spd681_root.get("warn_on_reported_differences", True)),
         ),
     )
 

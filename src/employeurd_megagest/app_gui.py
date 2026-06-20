@@ -13,12 +13,13 @@ from tkinter import filedialog, messagebox, ttk
 from .config import load_app_config
 from .errors import ConfigurationError, ConversionError, ValidationFailed
 from .gui_controller import GuiController, GuiOperationResult
-from .gui_dialogs import show_legal_notice, show_report_preview, show_security_window, show_support_window, show_update_result
+from .gui_dialogs import show_legal_notice, show_security_window, show_support_window
 from .gui_state import (
     build_file_preview,
     build_output_preview,
     default_output_root,
     generated_files,
+    summary_text,
 )
 from .gui_texts import (
     APP_DISPLAY_NAME,
@@ -31,6 +32,7 @@ from .gui_texts import (
     WEBSITE_URL,
 )
 from .gui_theme import Palette, configure_theme, status_colors
+from .models import ConversionResult, ReconciliationResult
 from .platform_actions import open_folder
 from .preferences import load_preferences, remember_output_dir, remember_update_check_on_startup
 from .resource_paths import default_config_dir, package_asset_path
@@ -206,6 +208,7 @@ class CheckOption(tk.Frame):
         self.variable = variable
         self.command = command
         self._disabled = False
+        self._locked = False
         self.columnconfigure(1, weight=1)
 
         self._box = tk.Canvas(self, width=19, height=19, highlightthickness=0, borderwidth=0, background=Palette.surface, cursor="hand2")
@@ -245,11 +248,20 @@ class CheckOption(tk.Frame):
             self._disabled = True
         if "!disabled" in states:
             self._disabled = False
+        if "locked" in states:
+            self._locked = True
+        if "!locked" in states:
+            self._locked = False
         self._redraw()
-        return ("disabled",) if self._disabled else ()
+        current_state = []
+        if self._disabled:
+            current_state.append("disabled")
+        if self._locked:
+            current_state.append("locked")
+        return tuple(current_state)
 
     def _toggle(self, _event=None) -> None:
-        if self._disabled:
+        if self._disabled or self._locked:
             return
         self.variable.set(not self.variable.get())
         if self.command:
@@ -257,11 +269,12 @@ class CheckOption(tk.Frame):
 
     def _redraw(self) -> None:
         checked = self.variable.get()
-        bg = Palette.disabled_bg if self._disabled else Palette.info_bg if checked else Palette.surface
-        border = Palette.disabled_bg if self._disabled else Palette.primary if checked else Palette.border
+        locked_checked = self._locked and checked and not self._disabled
+        bg = Palette.disabled_bg if self._disabled else Palette.success_bg if locked_checked else Palette.info_bg if checked else Palette.surface
+        border = Palette.disabled_bg if self._disabled else Palette.success if locked_checked else Palette.primary if checked else Palette.border
         fg = Palette.disabled if self._disabled else Palette.text
         muted = Palette.disabled if self._disabled else Palette.muted
-        cursor = "arrow" if self._disabled else "hand2"
+        cursor = "arrow" if self._disabled or self._locked else "hand2"
 
         self.configure(background=bg, highlightbackground=border, cursor=cursor)
         self._box.configure(background=bg, cursor=cursor)
@@ -269,8 +282,8 @@ class CheckOption(tk.Frame):
         self._description.configure(background=bg, foreground=muted, cursor=cursor)
 
         self._box.delete("all")
-        outline = Palette.disabled if self._disabled else Palette.primary if checked else Palette.border_strong
-        fill = Palette.primary if checked and not self._disabled else Palette.surface
+        outline = Palette.disabled if self._disabled else Palette.success if locked_checked else Palette.primary if checked else Palette.border_strong
+        fill = Palette.success if locked_checked else Palette.primary if checked and not self._disabled else Palette.surface
         self._box.create_rectangle(2, 2, 17, 17, fill=fill, outline=outline, width=1)
         if checked:
             color = "#ffffff" if not self._disabled else Palette.disabled
@@ -305,10 +318,23 @@ class ScrollableFrame(ttk.Frame):
         self._mouse_inside = inside
 
     def _on_content_configure(self, _event) -> None:
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        self._update_scrollregion()
 
     def _on_canvas_configure(self, event) -> None:
         self.canvas.itemconfigure(self._window, width=event.width)
+        self._update_scrollregion()
+
+    def _update_scrollregion(self) -> None:
+        bbox = self.canvas.bbox("all")
+        if not bbox:
+            return
+        canvas_height = max(1, self.canvas.winfo_height())
+        content_height = max(1, bbox[3] - bbox[1])
+        if content_height <= canvas_height + 24:
+            self.canvas.yview_moveto(0)
+            self.canvas.configure(scrollregion=(bbox[0], bbox[1], bbox[2], canvas_height))
+            return
+        self.canvas.configure(scrollregion=bbox)
 
     def _on_mousewheel(self, event) -> None:
         if not self._mouse_inside:
@@ -339,13 +365,13 @@ class EmployeurDMegaGestApp(tk.Tk):
         self.write_validation_json = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value="Prêt à commencer")
         self.status_detail = tk.StringVar(value="Ajoutez l'écriture EmployeurD. Sans dossier choisi, la sortie ira dans Documents.")
-        self.update_status = tk.StringVar(value="Mise à jour non vérifiée")
         self.disabled_reason = tk.StringVar(value="")
         self.last_result: GuiOperationResult | None = None
         self.last_error: Exception | None = None
         self.last_update_result: UpdateCheckResult | None = None
         self.busy = False
         self.activity_log: list[str] = [_timestamped("Ouverture de l'application. Ajoutez l'écriture EmployeurD pour commencer.")]
+        self.journal_summaries: list[tuple[str, str]] = []
         self._task_queue: queue.Queue[tuple[bool, object]] = queue.Queue()
         self._task_on_success = None
 
@@ -355,7 +381,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         self._refresh_all()
 
         if self.preferences.update_check_on_startup:
-            self.after(750, lambda: self._check_update(show_dialog=False))
+            self.after(750, self._check_update)
 
     def _set_product_icon(self) -> None:
         icon_paths = [
@@ -382,7 +408,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         self.rowconfigure(1, weight=1)
 
         self._build_header().grid(row=0, column=0, sticky="ew")
-        self.scroll_area = ScrollableFrame(self, padding=(14, 10, 14, 6))
+        self.scroll_area = ScrollableFrame(self, padding=(14, 8, 14, 2))
         self.scroll_area.grid(row=1, column=0, sticky="nsew")
         body = self.scroll_area.content
         body.columnconfigure(0, weight=7)
@@ -392,8 +418,8 @@ class EmployeurDMegaGestApp(tk.Tk):
         left = ttk.Frame(body, style="App.TFrame")
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
         left.columnconfigure(0, weight=1)
-        self._build_inputs_card(left).grid(row=0, column=0, sticky="ew", pady=(0, 7))
-        self._build_validation_card(left).grid(row=1, column=0, sticky="ew", pady=(0, 7))
+        self._build_inputs_card(left).grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        self._build_validation_card(left).grid(row=1, column=0, sticky="ew", pady=(0, 6))
         self._build_output_card(left).grid(row=2, column=0, sticky="ew")
 
         right = ttk.Frame(body, style="App.TFrame")
@@ -436,13 +462,13 @@ class EmployeurDMegaGestApp(tk.Tk):
 
     def _build_inputs_card(self, parent: ttk.Frame) -> ttk.Frame:
         card = _card(parent)
-        _card_title(card, "1", "Fichiers EmployeurD", "Ajoutez le TXT de paie. Un rapport de contrôle peut compléter la vérification.").grid(row=0, column=0, columnspan=3, sticky="ew")
+        _card_title(card, "1", "Fichiers EmployeurD", "Ajoutez le TXT de paie. Le SPD640-P peut confirmer les totaux.").grid(row=0, column=0, columnspan=3, sticky="ew")
         card.columnconfigure(1, weight=1)
 
-        ttk.Label(card, text="Écriture détaillée EmployeurD (TXT) · obligatoire", style="Title.TLabel").grid(row=1, column=0, columnspan=3, sticky="w", pady=(5, 0))
+        _file_heading(card, "Écriture détaillée EmployeurD (TXT)", "OBLIGATOIRE", "RequiredBadge.TLabel").grid(row=1, column=0, columnspan=3, sticky="ew", pady=(5, 0))
         ttk.Label(
             card,
-            text="Fichier obligatoire à convertir en MND.",
+            text="À fournir pour créer le fichier MND.",
             style="SmallMuted.TLabel",
             wraplength=430,
             justify="left",
@@ -454,10 +480,10 @@ class EmployeurDMegaGestApp(tk.Tk):
         self.source_meta.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(4, 0))
 
         ttk.Separator(card).grid(row=5, column=0, columnspan=3, sticky="ew", pady=4)
-        ttk.Label(card, text="Rapport de contrôle (CSV ou XML) · facultatif", style="Title.TLabel").grid(row=6, column=0, columnspan=3, sticky="w")
+        _file_heading(card, "Rapport de totaux SPD640-P (CSV)", "FACULTATIF", "OptionalBadge.TLabel").grid(row=6, column=0, columnspan=3, sticky="ew")
         ttk.Label(
             card,
-            text="SPD640-P confirme les débits/crédits. SPD681 contrôle les écarts RRQ/AE/RQAP.",
+            text="Recommandé pour confirmer les débits et crédits de la paie.",
             style="SmallMuted.TLabel",
             wraplength=430,
             justify="left",
@@ -475,15 +501,15 @@ class EmployeurDMegaGestApp(tk.Tk):
 
     def _build_validation_card(self, parent: ttk.Frame) -> ttk.Frame:
         card = _card(parent)
-        _card_title(card, "2", "Concordance", "Avec un rapport de contrôle, vous pouvez bloquer la création si un contrôle échoue.").grid(row=0, column=0, sticky="ew")
-        self.validation_mode_label = ttk.Label(card, text="", style="Body.TLabel", wraplength=430, justify="left")
+        _card_title(card, "2", "Concordance", "Avec le SPD640-P, vous pouvez bloquer la création si les totaux ne concordent pas.").grid(row=0, column=0, sticky="ew")
+        self.validation_mode_label = ttk.Label(card, text="", style="HintInfo.TLabel", wraplength=430, justify="left")
         self.validation_mode_label.grid(row=1, column=0, sticky="ew", pady=(5, 4))
         self.require_spd640_check = CheckOption(
             card,
             variable=self.require_spd640,
             command=self._mark_dirty,
-            text="Exiger la concordance du rapport",
-            description="Si un contrôle obligatoire échoue, le MND ne sera pas créé.",
+            text="Concordance du SPD640-P obligatoire",
+            description="S'active automatiquement dès qu'un SPD640-P est ajouté.",
         )
         self.require_spd640_check.grid(row=2, column=0, sticky="ew", pady=(2, 0))
         return card
@@ -555,7 +581,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         journal_panel.rowconfigure(1, weight=1)
         journal_panel.columnconfigure(0, weight=1)
         _panel_title(journal_panel, "Journal").grid(row=0, column=0, sticky="w", pady=(0, 5))
-        self.log_text = _dashboard_text(journal_panel, height=14, font_size=9)
+        self.log_text = _dashboard_text(journal_panel, height=13, font_size=9)
         self.log_text.grid(row=1, column=0, sticky="nsew")
         return card
 
@@ -583,36 +609,31 @@ class EmployeurDMegaGestApp(tk.Tk):
 
         secondary = ttk.Frame(bar, style="CardBody.TFrame")
         secondary.grid(row=0, column=2, sticky="e")
-        self.report_button = ttk.Button(secondary, text=Text.open_report, command=self._show_report, style="Action.TButton")
         self.folder_button = ttk.Button(secondary, text=Text.open_folder, command=self._open_folder, style="Action.TButton")
-        self.report_button.grid(row=0, column=0, padx=(0, 8))
-        self.folder_button.grid(row=0, column=1)
+        self.folder_button.grid(row=0, column=0)
         return bar
 
     def _build_footer(self) -> ttk.Frame:
         footer = ttk.Frame(self, style="App.TFrame")
         footer.columnconfigure(0, weight=1)
         ttk.Label(footer, text=COPYRIGHT_TEXT, style="Footer.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(footer, textvariable=self.update_status, style="Footer.TLabel").grid(row=0, column=1, sticky="e", padx=(0, 18))
         links = ttk.Frame(footer, style="App.TFrame")
-        links.grid(row=0, column=2, sticky="e")
+        links.grid(row=0, column=1, sticky="e")
         _link_label(links, Text.legal, lambda: show_legal_notice(self)).grid(row=0, column=0, padx=(0, 12))
         _link_label(links, WEBSITE_LINK_TEXT, lambda: webbrowser.open(WEBSITE_URL)).grid(row=0, column=1, padx=(0, 12))
         _link_label(links, REPOSITORY_LINK_TEXT, lambda: webbrowser.open(REPOSITORY_URL)).grid(row=0, column=2, padx=(0, 12))
         _link_label(links, Text.security, self._show_security).grid(row=0, column=3, padx=(0, 12))
         _link_label(links, Text.support, self._show_support).grid(row=0, column=4, padx=(0, 12))
-        self.update_button = ttk.Button(links, text=Text.check_updates, command=lambda: self._check_update(show_dialog=True), style="Quiet.TButton")
+        self.update_button = ttk.Button(links, text=Text.check_updates, command=self._check_update, style="Quiet.TButton")
         self.update_button.grid(row=0, column=5)
         return footer
 
     def _bind_shortcuts(self) -> None:
         self.bind_all("<Control-o>", lambda _event: self._choose_source())
         self.bind_all("<Control-O>", lambda _event: self._choose_source())
-        self.bind_all("<Control-r>", lambda _event: self._show_report())
-        self.bind_all("<Control-R>", lambda _event: self._show_report())
         self.bind_all("<Control-g>", lambda _event: self._generate())
         self.bind_all("<Control-G>", lambda _event: self._generate())
-        self.bind_all("<F5>", lambda _event: self._check_update(show_dialog=True))
+        self.bind_all("<F5>", lambda _event: self._check_update())
 
     def _choose_source(self) -> None:
         selected = filedialog.askopenfilename(
@@ -625,19 +646,19 @@ class EmployeurDMegaGestApp(tk.Tk):
 
     def _choose_spd640(self) -> None:
         selected = filedialog.askopenfilename(
-            title="Choisir un rapport de contrôle",
-            filetypes=[("Rapports de contrôle", "*.csv *.CSV *.xml *.XML"), ("Tous les fichiers", "*.*")],
+            title="Choisir le rapport SPD640-P",
+            filetypes=[("Rapports SPD640-P", "*.csv *.CSV"), ("Tous les fichiers", "*.*")],
         )
         if selected:
             self.spd640_path.set(selected)
             self.require_spd640.set(_control_report_kind(selected) == "SPD640-P")
-            self._log_event(f"Rapport de contrôle sélectionné : {Path(selected).name}")
+            self._log_event(f"Rapport SPD640-P sélectionné : {Path(selected).name}")
             self._refresh_all()
 
     def _clear_spd640(self) -> None:
         self.spd640_path.set("")
         self.require_spd640.set(False)
-        self._log_event("Rapport de contrôle retiré.")
+        self._log_event("Rapport SPD640-P retiré.")
         self._mark_dirty()
 
     def _choose_output_dir(self) -> None:
@@ -660,7 +681,7 @@ class EmployeurDMegaGestApp(tk.Tk):
 
         source_path = Path(self.source_path.get())
         spd640_path = _optional_path(self.spd640_path.get())
-        require_spd640 = self.require_spd640.get()
+        require_spd640 = bool(spd640_path)
         self._run_background(
             "Validation en cours",
             lambda: self.controller.validate(
@@ -684,7 +705,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         source_path = Path(self.source_path.get())
         output_root = self._resolved_output_root()
         spd640_path = _optional_path(self.spd640_path.get())
-        require_spd640 = self.require_spd640.get()
+        require_spd640 = bool(spd640_path)
         write_report = self.write_report_md.get()
         write_validation_json = self.write_validation_json.get()
         self._run_background(
@@ -753,6 +774,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         self.status.set("Validation réussie")
         self.status_detail.set("Tout est prêt. Vous pouvez créer le fichier MND.")
         self._log_event("Vérification réussie. Création du MND disponible.")
+        self._append_journal_summary("Résumé de la vérification", result, include_outputs=False)
 
     def _generation_succeeded(self, result: GuiOperationResult) -> None:
         self._remember_output_dir(self.output_dir.get())
@@ -760,11 +782,13 @@ class EmployeurDMegaGestApp(tk.Tk):
         self.status.set("MND créé")
         self.status_detail.set(_generated_outputs_status(result))
         self._log_event(_generated_outputs_log(result))
+        self._append_journal_summary("Résumé de la génération", result, include_outputs=True)
         messagebox.showinfo("Conversion terminée", _generated_outputs_message(result))
 
     def _show_error(self, error: Exception) -> None:
         self.last_result = None
         self.last_error = error
+        self._clear_payroll_summaries()
         self.status.set("À corriger")
         self.status_detail.set("Aucun MND ne sera créé tant que le problème n'est pas réglé.")
         self._log_event("Problème à corriger. Création du MND désactivée.")
@@ -772,10 +796,6 @@ class EmployeurDMegaGestApp(tk.Tk):
             "À corriger avant de créer le MND",
             f"{friendly_error_message(error)}\n\nDétails à transmettre au support:\n{technical_error_message(error)}",
         )
-
-    def _show_report(self) -> None:
-        if self.last_result:
-            show_report_preview(self, self.last_result.conversion)
 
     def _open_folder(self) -> None:
         if self.last_result and self.last_result.conversion:
@@ -799,12 +819,12 @@ class EmployeurDMegaGestApp(tk.Tk):
     def _show_support(self) -> None:
         show_support_window(self)
 
-    def _check_update(self, *, show_dialog: bool) -> None:
+    def _check_update(self) -> None:
         if self.busy:
             return
         config = load_app_config(default_config_dir())
         update_url = str(config.updates.get("url", ""))
-        self.update_status.set("Vérification de mise à jour...")
+        self._log_event("Vérification de la version en cours.")
         self.update_button.configure(text=Text.check_updates)
         self.update_button.state(["disabled"])
         self._refresh_update_badge()
@@ -822,30 +842,24 @@ class EmployeurDMegaGestApp(tk.Tk):
                 return
             if self.winfo_exists():
                 self.update_button.state(["!disabled"])
-                self._update_check_finished(result, show_dialog=show_dialog)
+                self._update_check_finished(result)
 
         threading.Thread(target=worker, daemon=True).start()
         self.after(100, poll)
 
-    def _update_check_finished(self, result: UpdateCheckResult, *, show_dialog: bool) -> None:
+    def _update_check_finished(self, result: UpdateCheckResult) -> None:
         self.last_update_result = result
         if result.update_available:
             self.status.set("Mise à jour disponible")
             self.status_detail.set("Une nouvelle version est disponible. Rien ne sera installé automatiquement.")
-            self.update_status.set(f"Nouvelle version : {result.latest_version}")
-            self.update_button.configure(text=Text.update_available)
             self._log_event("Mise à jour disponible.")
         elif result.ok:
-            self.update_status.set("Application à jour")
-            self.update_button.configure(text=Text.up_to_date)
             self._log_event("Vérification terminée : application à jour.")
         else:
-            self.update_status.set("Mise à jour non vérifiée")
-            self.update_button.configure(text=Text.check_updates)
             self._log_event("Vérification de mise à jour impossible. L'application demeure utilisable.")
+        self.update_button.configure(text=Text.check_updates)
+        self._append_update_summary(result)
         self._refresh_update_badge()
-        if show_dialog:
-            show_update_result(self, result)
 
     def _validate_inputs(self) -> None:
         source = self.source_path.get().strip()
@@ -863,20 +877,21 @@ class EmployeurDMegaGestApp(tk.Tk):
         if not output_preview.ok:
             raise ConversionError(output_preview.detail)
         if self.require_spd640.get() and not self.spd640_path.get().strip():
-            raise ValidationFailed("Le rapport de contrôle est requis en mode bloquant.")
+            raise ValidationFailed("Le rapport SPD640-P est requis en mode bloquant.")
 
     def _mark_dirty(self) -> None:
         if self.busy:
             return
         self.last_result = None
         self.last_error = None
+        self._clear_payroll_summaries()
         self.status.set("Vérification à refaire")
         self.status_detail.set("Les choix ont changé. Vérifiez de nouveau avant de créer le MND.")
         self._refresh_all()
 
     def _refresh_all(self) -> None:
         source_preview = build_file_preview(self.source_path.get(), label="EmployeurD", suffixes=(".txt",), optional=False)
-        spd_preview = build_file_preview(self.spd640_path.get(), label="Rapport de contrôle", suffixes=(".csv", ".xml"), optional=True)
+        spd_preview = build_file_preview(self.spd640_path.get(), label="Rapport SPD640-P", suffixes=(".csv",), optional=True)
         output_preview = build_output_preview(
             self.source_path.get(),
             self.output_dir.get(),
@@ -890,9 +905,16 @@ class EmployeurDMegaGestApp(tk.Tk):
         self.output_files.configure(text=_output_files_text(output_preview.files))
 
         has_spd640 = bool(self.spd640_path.get().strip())
-        if not has_spd640 and self.require_spd640.get():
+        if has_spd640 and not self.require_spd640.get():
+            self.require_spd640.set(True)
+        elif not has_spd640 and self.require_spd640.get():
             self.require_spd640.set(False)
-        self.require_spd640_check.state(["!disabled"] if has_spd640 and not self.busy else ["disabled"])
+        if self.busy:
+            self.require_spd640_check.state(["disabled", "!locked"])
+        elif has_spd640:
+            self.require_spd640_check.state(["!disabled", "locked"])
+        else:
+            self.require_spd640_check.state(["disabled", "!locked"])
         self.clear_spd640_button.state(["!disabled"] if has_spd640 and not self.busy else ["disabled"])
 
         can_validate = self._can_validate()
@@ -901,7 +923,6 @@ class EmployeurDMegaGestApp(tk.Tk):
         self.generate_button.state(["!disabled"] if can_generate else ["disabled"])
         self.validate_button.configure(style="Action.TButton" if can_generate else "Primary.TButton")
         self.generate_button.configure(style="Primary.TButton" if can_generate else "Action.TButton")
-        self.report_button.state(["!disabled"] if self.last_result else ["disabled"])
         folder_available = bool(generated_files(self.last_result.conversion) if self.last_result and self.last_result.conversion else False) or self._resolved_output_root().exists()
         self.folder_button.state(["!disabled"] if folder_available and not self.busy else ["disabled"])
         self.source_button.state(["disabled"] if self.busy else ["!disabled"])
@@ -915,7 +936,8 @@ class EmployeurDMegaGestApp(tk.Tk):
             self.progress.grid_remove()
 
         self.validation_mode_label.configure(
-            text=_validation_mode_text(has_spd640, self.require_spd640.get(), _control_report_kind(self.spd640_path.get()))
+            text=_validation_mode_text(has_spd640, self.require_spd640.get(), _control_report_kind(self.spd640_path.get())),
+            style=_validation_mode_style(has_spd640, self.require_spd640.get()),
         )
         self.disabled_reason.set(self._disabled_reason(can_validate, can_generate))
         self._refresh_dashboard()
@@ -923,7 +945,7 @@ class EmployeurDMegaGestApp(tk.Tk):
 
     def _refresh_dashboard(self) -> None:
         if hasattr(self, "log_text"):
-            _set_text(self.log_text, "\n".join(self.activity_log))
+            _set_journal_text(self.log_text, self.activity_log, self.journal_summaries)
 
     def _refresh_status_badge(self) -> None:
         if self.busy:
@@ -962,9 +984,9 @@ class EmployeurDMegaGestApp(tk.Tk):
         screen_width = max(1, self.winfo_screenwidth())
         screen_height = max(1, self.winfo_screenheight())
         horizontal_margin = 48 if screen_width >= 1280 else 24
-        vertical_margin = 92 if screen_height >= 900 else 72
+        vertical_margin = 64 if screen_height >= 900 else 50
         width = min(1360, max(1040, screen_width - horizontal_margin))
-        height = min(900, max(660, screen_height - vertical_margin))
+        height = min(960, max(680, screen_height - vertical_margin))
         width = min(width, screen_width)
         height = min(height, screen_height)
         x = max(0, int((screen_width - width) / 2))
@@ -1021,6 +1043,35 @@ class EmployeurDMegaGestApp(tk.Tk):
         if hasattr(self, "log_text"):
             self._refresh_dashboard()
 
+    def _append_journal_summary(self, title: str, result: GuiOperationResult, *, include_outputs: bool) -> None:
+        if not result.conversion:
+            return
+        summary_kind = "generation" if include_outputs else "validation"
+        output_files = generated_files(result.conversion) if include_outputs else ()
+        self.journal_summaries.append(
+            (
+                summary_kind,
+                _journal_summary_block(
+                    title,
+                    result.conversion,
+                    result.reconciliations,
+                    output_files=output_files,
+                    include_mnd_recheck=include_outputs,
+                ),
+            )
+        )
+        if hasattr(self, "log_text"):
+            self._refresh_dashboard()
+
+    def _append_update_summary(self, result: UpdateCheckResult) -> None:
+        self.journal_summaries = [summary for summary in self.journal_summaries if summary[0] != "update"]
+        self.journal_summaries.append(("update", _journal_update_block(result)))
+        if hasattr(self, "log_text"):
+            self._refresh_dashboard()
+
+    def _clear_payroll_summaries(self) -> None:
+        self.journal_summaries = [summary for summary in self.journal_summaries if summary[0] == "update"]
+
 
 def _optional_path(value: str) -> Path | None:
     cleaned = value.strip()
@@ -1050,7 +1101,7 @@ def _card(parent: ttk.Frame) -> tk.Frame:
         highlightthickness=1,
         bd=0,
         padx=14,
-        pady=9,
+        pady=8,
     )
     frame.grid_columnconfigure(0, weight=1)
     return frame
@@ -1062,6 +1113,14 @@ def _card_title(parent: ttk.Frame, step: str, title: str, subtitle: str) -> ttk.
     ttk.Label(frame, text=step, style="StepBadge.TLabel").grid(row=0, column=0, rowspan=2, sticky="n", padx=(0, 10), pady=(1, 0))
     ttk.Label(frame, text=title, style="Title.TLabel").grid(row=0, column=1, sticky="w")
     ttk.Label(frame, text=subtitle, style="SmallMuted.TLabel", wraplength=500).grid(row=1, column=1, sticky="ew", pady=(1, 0))
+    return frame
+
+
+def _file_heading(parent: ttk.Frame, title: str, badge: str, badge_style: str) -> ttk.Frame:
+    frame = ttk.Frame(parent, style="CardBody.TFrame")
+    frame.columnconfigure(0, weight=1)
+    ttk.Label(frame, text=title, style="Title.TLabel").grid(row=0, column=0, sticky="w")
+    ttk.Label(frame, text=badge, style=badge_style).grid(row=0, column=1, sticky="e", padx=(10, 0))
     return frame
 
 
@@ -1084,7 +1143,7 @@ def _subpanel(parent: tk.Widget) -> tk.Frame:
         highlightthickness=1,
         bd=0,
         padx=12,
-        pady=8,
+        pady=7,
     )
     panel.columnconfigure(1, weight=1)
     return panel
@@ -1119,27 +1178,27 @@ def _dashboard_text(parent: tk.Widget, *, height: int, font_size: int = 10) -> t
     )
 
 def _validation_mode_text(has_report: bool, strict: bool, report_kind: str) -> str:
-    if strict:
-        return f"{report_kind} est obligatoire. Si un contrôle échoue, le MND ne sera pas créé."
     if has_report and report_kind == "SPD640-P":
-        return "Le SPD640-P sera comparé aux totaux débit/crédit de l'écriture avant la création du MND."
-    if has_report and report_kind == "SPD681":
-        return "Le SPD681 sera lu comme contrôle RRQ/AE/RQAP. Il ne remplace pas le SPD640-P pour les débits/crédits."
+        return "Le SPD640-P est actif : ses totaux doivent concorder avec l'écriture, sinon le MND ne sera pas créé."
     if has_report:
-        return "Le rapport fourni sera vérifié avant la création du MND."
-    return "Le TXT sera vérifié seul. Ajoutez un SPD640-P pour confirmer les totaux de paie."
+        return "Le rapport fourni doit être un SPD640-P CSV pour confirmer les totaux."
+    return "On vérifie l'écriture EmployeurD seule. Ajoutez le SPD640-P CSV pour confirmer les totaux de paie."
+
+
+def _validation_mode_style(has_report: bool, strict: bool) -> str:
+    if has_report:
+        return "HintSuccess.TLabel"
+    return "HintInfo.TLabel"
 
 
 def _control_report_kind(value: str) -> str:
     path = Path(value.strip()) if value.strip() else None
     if not path:
-        return "rapport de contrôle"
+        return "rapport SPD640-P"
     name = path.name.lower()
-    if "spd681" in name or path.suffix.lower() == ".xml":
-        return "SPD681"
     if "spd640" in name or path.suffix.lower() == ".csv":
         return "SPD640-P"
-    return "rapport de contrôle"
+    return "rapport SPD640-P"
 
 
 def _generated_outputs_message(result: GuiOperationResult) -> str:
@@ -1224,6 +1283,83 @@ def _set_optional_label(label: ttk.Label, text: str) -> None:
         label.grid()
     else:
         label.grid_remove()
+
+
+def _journal_summary_block(
+    title: str,
+    result: ConversionResult,
+    reconciliations: list[ReconciliationResult],
+    *,
+    output_files: tuple[Path, ...] = (),
+    include_mnd_recheck: bool = True,
+) -> str:
+    lines = [
+        f"======= {title} =======",
+        summary_text(result, reconciliations, include_mnd_recheck=include_mnd_recheck),
+    ]
+    if output_files:
+        lines.extend(["", "Fichiers créés:"])
+        lines.extend(f"- {path.name}" for path in output_files)
+    return "\n".join(lines).strip()
+
+
+def _journal_update_block(result: UpdateCheckResult) -> str:
+    lines = [
+        "======= Mise à jour =======",
+        f"Version installée: {result.current_version}",
+        f"Dernière version: {result.latest_version or 'n/d'}",
+        f"Date: {result.published_at or 'n/d'}",
+        f"État: {result.message}",
+        f"SHA256 attendu: {result.sha256 or 'n/d'}",
+    ]
+    if result.download_url:
+        lines.append(f"Lien: {result.download_url}")
+    lines.extend(
+        [
+            "",
+            "Aucun fichier de paie n'a été transmis pendant cette vérification.",
+        ]
+    )
+    if not result.ok:
+        lines.append("L'utilitaire demeure utilisable hors ligne.")
+    return "\n".join(lines).strip()
+
+
+def _set_journal_text(widget: tk.Text, activity_log: list[str], summaries: list[tuple[str, str]]) -> None:
+    widget.configure(state="normal")
+    widget.delete("1.0", "end")
+    widget.tag_configure("journal", foreground=Palette.text)
+    widget.tag_configure("summary_header_validation", background=Palette.success_bg, foreground=Palette.success, font=("Segoe UI Semibold", 9), spacing1=7, spacing3=4)
+    widget.tag_configure("summary_header_generation", background=Palette.info_bg, foreground=Palette.primary_dark, font=("Segoe UI Semibold", 9), spacing1=7, spacing3=4)
+    widget.tag_configure("summary_header_update", background=Palette.disabled_bg, foreground=Palette.muted, font=("Segoe UI Semibold", 9), spacing1=7, spacing3=4)
+    widget.tag_configure("summary_body", foreground=Palette.text, lmargin1=8, lmargin2=8)
+    widget.tag_configure("summary_file", foreground=Palette.primary_dark, lmargin1=16, lmargin2=16)
+    widget.tag_configure("summary_label", foreground=Palette.primary_dark, font=("Segoe UI Semibold", 9), lmargin1=8, lmargin2=8, spacing1=3)
+
+    if activity_log:
+        widget.insert("end", "\n".join(activity_log), ("journal",))
+
+    for kind, block in summaries:
+        if widget.index("end-1c") != "1.0":
+            widget.insert("end", "\n\n")
+        for line in block.splitlines():
+            if line.startswith("======="):
+                if kind == "generation":
+                    tag = "summary_header_generation"
+                elif kind == "update":
+                    tag = "summary_header_update"
+                else:
+                    tag = "summary_header_validation"
+            elif line == "Fichiers créés:":
+                tag = "summary_label"
+            elif line.startswith("- "):
+                tag = "summary_file"
+            else:
+                tag = "summary_body"
+            widget.insert("end", f"{line}\n", (tag,))
+
+    widget.see("end")
+    widget.configure(state="disabled")
 
 
 def _set_text(widget: tk.Text, value: str) -> None:

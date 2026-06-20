@@ -8,13 +8,12 @@ from pathlib import Path
 from .audit_log import write_audit_event
 from .config import load_app_config
 from .converter import convert_file, inspect_source, validate_file
-from .errors import ConfigurationError, ConversionError, ErrorDetail, FileOperationError, ValidationFailed
+from .errors import ConfigurationError, ConversionError, FileOperationError, ValidationFailed
 from .integrity import check_running_app_integrity
 from .parser_mnd import parse_mnd_file
 from .parser_employeurd import parse_employeurd_file
 from .reports.spd640_parser import parse_spd640_csv
-from .reports.spd681_parser import parse_spd681_xml
-from .reconciliation import reconcile_control_report, reconcile_spd640, reconciliation_failed
+from .reconciliation import reconcile_spd640, reconciliation_failed
 from .update_check import check_for_update
 from .validator import mnd_totals, validate_source_entries
 from .version import __version__
@@ -46,8 +45,6 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser.add_argument("--overwrite", action="store_true")
     validate_parser.add_argument("--spd640", type=Path, help="Rapport SPD640-P CSV à comparer.")
     validate_parser.add_argument("--require-spd640", action="store_true", help="Bloque si le rapprochement SPD640 échoue.")
-    validate_parser.add_argument("--control-report", type=Path, help="Rapport de contrôle SPD640-P CSV ou SPD681 XML.")
-    validate_parser.add_argument("--require-control-report", action="store_true", help="Bloque si le contrôle fourni échoue.")
 
     convert_parser = subparsers.add_parser("convert", help="Convertit un fichier EmployeurD TXT vers MND.")
     convert_parser.add_argument("input", type=Path)
@@ -56,8 +53,6 @@ def build_parser() -> argparse.ArgumentParser:
     convert_parser.add_argument("--overwrite", action="store_true")
     convert_parser.add_argument("--spd640", type=Path, help="Rapport SPD640-P CSV à comparer avant la création.")
     convert_parser.add_argument("--require-spd640", action="store_true", help="Bloque si le rapprochement SPD640 échoue.")
-    convert_parser.add_argument("--control-report", type=Path, help="Rapport de contrôle SPD640-P CSV ou SPD681 XML.")
-    convert_parser.add_argument("--require-control-report", action="store_true", help="Bloque si le contrôle fourni échoue.")
 
     parse_parser = subparsers.add_parser("parse-mnd", help="Parse un fichier MND et affiche ses totaux.")
     parse_parser.add_argument("input", type=Path)
@@ -65,17 +60,9 @@ def build_parser() -> argparse.ArgumentParser:
     spd640_parser = subparsers.add_parser("parse-spd640", help="Lit un rapport SPD640-P CSV et affiche ses totaux.")
     spd640_parser.add_argument("input", type=Path)
 
-    spd681_parser = subparsers.add_parser("parse-spd681", help="Lit un rapport SPD681 XML et affiche ses contrôles RRQ/AE/RQAP.")
-    spd681_parser.add_argument("input", type=Path)
-
     reconcile_parser = subparsers.add_parser("reconcile-spd640", help="Compare un TXT EmployeurD avec un rapport SPD640-P CSV.")
     reconcile_parser.add_argument("source", type=Path)
     reconcile_parser.add_argument("spd640", type=Path)
-
-    reconcile_control_parser = subparsers.add_parser("reconcile-control", help="Compare un TXT EmployeurD avec un rapport de contrôle.")
-    reconcile_control_parser.add_argument("source", type=Path)
-    reconcile_control_parser.add_argument("report", type=Path)
-    reconcile_control_parser.add_argument("--required", action="store_true", help="Retourne une erreur si le contrôle échoue.")
 
     subparsers.add_parser("check-update", help="Vérifie si une nouvelle version est disponible.")
 
@@ -141,11 +128,6 @@ def main(argv: list[str] | None = None) -> int:
             _print_spd640_report(report)
             return EXIT_OK
 
-        if args.command == "parse-spd681":
-            report = parse_spd681_xml(args.input)
-            _print_spd681_report(report)
-            return EXIT_OK
-
         if args.command == "reconcile-spd640":
             result = _handle_spd640_reconciliation(args.source, args.spd640, config, require=True)
             if reconciliation_failed(result):
@@ -153,13 +135,6 @@ def main(argv: list[str] | None = None) -> int:
                     f"Rapprochement SPD640 en écart: débit={result.debit_difference:.2f}, crédit={result.credit_difference:.2f}."
                 )
             _audit(config, "reconcile_spd640", "success", {})
-            return EXIT_OK
-
-        if args.command == "reconcile-control":
-            result = _handle_control_reconciliation(args.source, args.report, config, require=args.required)
-            if reconciliation_failed(result):
-                raise _validation_from_reconciliation(result)
-            _audit(config, "reconcile_control", "success", {"report_type": result.report_type})
             return EXIT_OK
 
         if args.command == "check-update":
@@ -243,33 +218,11 @@ def _handle_spd640_reconciliation(source_path: Path, report_path: Path, config, 
 
 
 def _collect_control_reconciliations(args, source_path: Path, config) -> list:
-    selected = [path for path in (getattr(args, "spd640", None), getattr(args, "control_report", None)) if path]
-    if len(selected) > 1:
-        raise ValidationFailed("Utilisez --spd640 ou --control-report, pas les deux.")
-    if not selected:
+    report_path = getattr(args, "spd640", None)
+    if not report_path:
         return []
-    require = bool(getattr(args, "require_spd640", False) or getattr(args, "require_control_report", False))
-    return [_handle_control_reconciliation(source_path, selected[0], config, require=require)]
-
-
-def _handle_control_reconciliation(source_path: Path, report_path: Path, config, *, require: bool):
-    entries = parse_employeurd_file(source_path, reject_non_crlf=config.validation.reject_non_crlf_source)
-    validate_source_entries(entries, config.validation)
-    result = reconcile_control_report(entries, report_path, config, required=require or None)
-    if result.report_type == "SPD640":
-        _print_spd640_reconciliation(result)
-    else:
-        _print_control_reconciliation(result)
-    return result
-
-
-def _validation_from_reconciliation(result) -> ValidationFailed:
-    errors = [
-        ErrorDetail(message.code, message.message, message.line_number, message.field)
-        for message in result.messages
-        if message.severity == "error"
-    ]
-    return ValidationFailed(errors or f"Rapprochement {result.report_type} en écart.")
+    require = bool(getattr(args, "require_spd640", False))
+    return [_handle_spd640_reconciliation(source_path, report_path, config, require=require)]
 
 
 def _print_spd640_report(report) -> None:
@@ -284,21 +237,6 @@ def _print_spd640_report(report) -> None:
     print(f"mnts_banque={payroll_totals.other_totals['mnts_banque']:.2f}")
 
 
-def _print_spd681_report(report) -> None:
-    print(f"lignes={report.row_count}")
-    print(f"lot={report.batch or 'n/d'}")
-    print(f"periode={report.period or 'n/d'}")
-    print(f"date={report.report_date.isoformat() if report.report_date else 'n/d'}")
-    print(f"ecart_minimum={report.difference_threshold:.2f}")
-    print(f"ecart_maximal={report.max_absolute_difference:.2f}")
-    print(f"lignes_avec_ecart={report.rows_with_reported_difference}")
-    for program, totals in sorted(report.totals_by_program.items()):
-        print(f"{program}_gains_admissibles={totals.eligible_earnings:.2f}")
-        print(f"{program}_cotisations_payees={totals.paid:.2f}")
-        print(f"{program}_cotisations_prevues={totals.expected:.2f}")
-        print(f"{program}_ecart={totals.difference:.2f}")
-
-
 def _print_spd640_reconciliation(result) -> None:
     status = "OK" if result.status == "success" else "ECART" if result.status == "failed" else "IGNORE"
     print(f"spd640={status}")
@@ -310,14 +248,3 @@ def _print_spd640_reconciliation(result) -> None:
     print(f"spd640_credit={result.report_credit:.2f}")
     print(f"debit_difference={result.debit_difference:.2f}")
     print(f"credit_difference={result.credit_difference:.2f}")
-
-
-def _print_control_reconciliation(result) -> None:
-    status = "OK" if result.status == "success" else "ECART" if result.status == "failed" else "IGNORE"
-    print(f"{result.report_type.lower()}={status}")
-    print(f"lot_source={result.source_batch or 'n/d'}")
-    print(f"lot_rapport={result.report_batch or 'n/d'}")
-    print(f"periode_source={result.source_period or 'n/d'}")
-    print(f"periode_rapport={result.report_period or 'n/d'}")
-    for key, value in sorted(result.details.items()):
-        print(f"{key}={value}")

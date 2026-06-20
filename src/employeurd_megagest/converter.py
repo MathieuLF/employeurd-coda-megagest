@@ -41,6 +41,7 @@ def inspect_source(path: Path, config: AppConfig) -> ConversionResult:
     entries = parse_employeurd_file(path, reject_non_crlf=config.validation.reject_non_crlf_source)
     validate_source_entries(entries, config.validation)
     debit, credit = source_totals(entries)
+    account_count, debit_account_count, credit_account_count = _source_account_counts(entries)
     return ConversionResult(
         status="success",
         source_path=path,
@@ -53,7 +54,9 @@ def inspect_source(path: Path, config: AppConfig) -> ConversionResult:
         period=entries[0].entry_date.strftime("%Y%m") if entries else None,
         batch=entries[0].batch if entries else None,
         entry_date=entries[0].entry_date.isoformat() if entries else None,
-        account_count=len({entry.account for entry in entries}),
+        account_count=account_count,
+        debit_account_count=debit_account_count,
+        credit_account_count=credit_account_count,
         unknown_account_count=0,
         source_sha256=source_hash,
         mnd_sha256=None,
@@ -118,6 +121,7 @@ def validate_file(
         raise ValidationFailed(mnd_reconciliation_errors)
 
     debit, credit = mnd_totals(draft.mnd_entries)
+    account_count, debit_account_count, credit_account_count = _mnd_account_counts(draft.mnd_entries)
     result = ConversionResult(
         status="success",
         source_path=source_path,
@@ -130,7 +134,9 @@ def validate_file(
         period=draft.mnd_entries[0].period if draft.mnd_entries else None,
         batch=draft.source_entries[0].batch if draft.source_entries else None,
         entry_date=draft.source_entries[0].entry_date.isoformat() if draft.source_entries else None,
-        account_count=len({entry.account for entry in draft.mnd_entries}),
+        account_count=account_count,
+        debit_account_count=debit_account_count,
+        credit_account_count=credit_account_count,
         unknown_account_count=0,
         source_sha256=draft.source_sha256,
         mnd_sha256=draft.mnd_sha256,
@@ -179,6 +185,7 @@ def convert_file(
         raise ValidationFailed(mnd_reconciliation_errors)
 
     debit, credit = mnd_totals(draft.mnd_entries)
+    account_count, debit_account_count, credit_account_count = _mnd_account_counts(draft.mnd_entries)
     result = ConversionResult(
         status="success",
         source_path=source_path,
@@ -191,7 +198,9 @@ def convert_file(
         period=draft.mnd_entries[0].period if draft.mnd_entries else None,
         batch=draft.source_entries[0].batch if draft.source_entries else None,
         entry_date=draft.source_entries[0].entry_date.isoformat() if draft.source_entries else None,
-        account_count=len({entry.account for entry in draft.mnd_entries}),
+        account_count=account_count,
+        debit_account_count=debit_account_count,
+        credit_account_count=credit_account_count,
         unknown_account_count=0,
         source_sha256=draft.source_sha256,
         mnd_sha256=draft.mnd_sha256,
@@ -253,6 +262,22 @@ def _write_artifacts(result: ConversionResult, *, overwrite: bool) -> None:
         _write_text_atomic(result.report_path, build_markdown_report(result), encoding="utf-8", overwrite=overwrite)
     if result.validation_json_path:
         _write_text_atomic(result.validation_json_path, build_validation_json(result), encoding="utf-8", overwrite=overwrite)
+
+
+def _source_account_counts(entries: list[EmployeurDEntry]) -> tuple[int, int, int]:
+    return (
+        len({entry.account for entry in entries}),
+        len({entry.account for entry in entries if entry.amount > ZERO}),
+        len({entry.account for entry in entries if entry.amount < ZERO}),
+    )
+
+
+def _mnd_account_counts(entries: list[MndEntry]) -> tuple[int, int, int]:
+    return (
+        len({entry.account for entry in entries}),
+        len({entry.account for entry in entries if entry.debit > ZERO}),
+        len({entry.account for entry in entries if entry.credit > ZERO}),
+    )
 
 
 def _assert_output_available(path: Path, *, overwrite: bool) -> None:

@@ -123,12 +123,17 @@ def build_output_preview(
     return OutputPreview(plan.directory, files=files, detail=detail, ok=True)
 
 
-def build_metrics(result: ConversionResult | None, reconciliations: list[ReconciliationResult] | None = None) -> list[ResultMetric]:
+def build_metrics(
+    result: ConversionResult | None,
+    reconciliations: list[ReconciliationResult] | None = None,
+    *,
+    include_mnd_recheck: bool = True,
+) -> list[ResultMetric]:
     if not result:
         return [
             ResultMetric("Fichiers", "En attente de vérification"),
             ResultMetric("MND", "Créé après une vérification réussie"),
-            ResultMetric("Rapport de contrôle", "Facultatif, utile pour confirmer ou compléter les contrôles"),
+            ResultMetric("SPD640-P", "Facultatif, utile pour confirmer les totaux débit/crédit"),
         ]
 
     delta = abs(result.total_debit - result.total_credit)
@@ -140,17 +145,19 @@ def build_metrics(result: ConversionResult | None, reconciliations: list[Reconci
         ResultMetric("Débits", _format_money(result.total_debit)),
         ResultMetric("Crédits", _format_money(result.total_credit)),
         ResultMetric("Écart", _format_money(delta)),
-        ResultMetric("Comptes détectés", str(result.account_count) if result.account_count is not None else "n/d"),
-        ResultMetric("Relecture MND", "OK" if result.status == "success" else "Échec"),
+        ResultMetric("Comptes uniques", str(result.account_count) if result.account_count is not None else "n/d"),
+        ResultMetric("Comptes au débit", str(result.debit_account_count) if result.debit_account_count is not None else "n/d"),
+        ResultMetric("Comptes au crédit", str(result.credit_account_count) if result.credit_account_count is not None else "n/d"),
     ]
+    if include_mnd_recheck:
+        metrics.append(ResultMetric("Relecture MND", "OK" if result.status == "success" else "Échec"))
 
     current_reconciliations = reconciliations if reconciliations is not None else result.reconciliations
     if current_reconciliations:
         for reconciliation in current_reconciliations:
-            label = "OK" if reconciliation.status == "success" else "Écart"
-            metrics.append(ResultMetric(reconciliation.report_type, f"{label} ({_format_money(reconciliation.debit_difference)} / {_format_money(reconciliation.credit_difference)})"))
+            metrics.extend(_reconciliation_metrics(reconciliation))
     else:
-        metrics.append(ResultMetric("Rapport de contrôle", "Non fourni / optionnel"))
+        metrics.append(ResultMetric("SPD640-P", "Non fourni / optionnel"))
     return metrics
 
 
@@ -161,8 +168,16 @@ def blocking_messages(result: ConversionResult | None, errors: tuple[str, ...] =
     return messages
 
 
-def summary_text(result: ConversionResult | None, reconciliations: list[ReconciliationResult] | None = None) -> str:
-    lines = [f"{metric.label}: {metric.value}" for metric in build_metrics(result, reconciliations)]
+def summary_text(
+    result: ConversionResult | None,
+    reconciliations: list[ReconciliationResult] | None = None,
+    *,
+    include_mnd_recheck: bool = True,
+) -> str:
+    lines = [
+        f"{metric.label}: {metric.value}"
+        for metric in build_metrics(result, reconciliations, include_mnd_recheck=include_mnd_recheck)
+    ]
     return "\n".join(lines)
 
 
@@ -208,6 +223,27 @@ def _format_datetime(timestamp: float) -> str:
 
 def _format_money(value: Decimal) -> str:
     return f"{value:,.2f} $".replace(",", " ").replace(".", ",")
+
+
+def _reconciliation_metrics(reconciliation: ReconciliationResult) -> list[ResultMetric]:
+    status = "concordant" if reconciliation.status == "success" else "en écart"
+    if reconciliation.report_type == "SPD640":
+        return [
+            ResultMetric(
+                "SPD640-P",
+                f"{status.capitalize()} - totaux comparés débit {_format_money(reconciliation.report_debit)} / crédit {_format_money(reconciliation.report_credit)}",
+            ),
+            ResultMetric(
+                "Écart SPD640-P",
+                f"débit {_format_money(reconciliation.debit_difference)} / crédit {_format_money(reconciliation.credit_difference)}",
+            ),
+        ]
+    return [
+        ResultMetric(
+            reconciliation.report_type,
+            f"{status.capitalize()} - écarts débit {_format_money(reconciliation.debit_difference)} / crédit {_format_money(reconciliation.credit_difference)}",
+        )
+    ]
 
 
 def _unknown_account_count(messages: list[ValidationMessage]) -> str:

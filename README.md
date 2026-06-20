@@ -16,7 +16,7 @@
 
 EmployeurD-MegaGest est un utilitaire Windows qui prépare un fichier `.mnd` pour MégaGest à partir d'une écriture détaillée EmployeurD au format TXT.
 
-Un rapport de contrôle peut être ajouté au besoin. Le SPD640-P CSV confirme les totaux débit/crédit; le SPD681 XML complète les contrôles RRQ, assurance-emploi et RQAP.
+Un rapport SPD640-P CSV peut être ajouté au besoin pour confirmer les totaux débit/crédit avant la création du MND.
 
 ## Utiliser l'application
 
@@ -24,7 +24,7 @@ Un rapport de contrôle peut être ajouté au besoin. Le SPD640-P CSV confirme l
 2. Extraire le fichier zip.
 3. Ouvrir `EmployeurD-MegaGest.exe`.
 4. Ajouter l'écriture EmployeurD TXT.
-5. Ajouter un rapport de contrôle au besoin.
+5. Ajouter le rapport SPD640-P CSV au besoin.
 6. Vérifier la paie, puis créer le MND si tout est conforme.
 
 ## Pages utiles

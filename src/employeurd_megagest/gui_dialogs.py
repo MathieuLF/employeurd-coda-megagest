@@ -12,7 +12,6 @@ from .gui_texts import LEGAL_NOTICE_TEXT, SECURITY_NOTICE_TEXT, SUPPORT_EMAIL, S
 from .integrity import IntegrityCheckResult, check_running_app_integrity, local_integrity_details
 from .models import ConversionResult
 from .platform_actions import open_folder, open_path
-from .update_check import UpdateCheckResult
 from .version import __version__
 
 
@@ -101,30 +100,6 @@ def show_security_window(
         row=2,
     )
     _load_security_details(dialog, text)
-
-
-def show_update_result(parent: tk.Tk, result: UpdateCheckResult) -> None:
-    dialog = _dialog(parent, "Mise à jour", "620x420")
-    body = [
-        f"Version installée : {result.current_version}",
-        f"Dernière version : {result.latest_version or 'n/d'}",
-        f"Date : {result.published_at or 'n/d'}",
-        f"État : {result.message}",
-        f"SHA256 attendu : {result.sha256 or 'n/d'}",
-        "",
-        "Aucun fichier de paie n'est envoyé pendant cette vérification.",
-    ]
-    if result.release_notes:
-        body.extend(["", "Notes de version", "================", result.release_notes])
-    if not result.ok:
-        body.append("L'application peut quand même être utilisée.")
-    text = _text_block(dialog, "\n".join(body))
-    text.grid(row=0, column=0, sticky="nsew", padx=16, pady=(16, 10))
-    actions = []
-    if result.download_url:
-        actions.append(("Ouvrir la page de version", lambda: webbrowser.open(result.download_url or "")))
-    actions.append((Text.close, dialog.destroy))
-    _button_row(dialog, actions)
 
 
 def _dialog(parent: tk.Tk, title: str, geometry: str) -> tk.Toplevel:

@@ -111,7 +111,7 @@ class GuiController:
 def _build_reconciliations(entries, spd640_path: Path | None, config, require_spd640: bool) -> list[ReconciliationResult]:
     if not spd640_path:
         if require_spd640:
-            raise ValidationFailed("Le rapport de contrôle est requis en mode bloquant.")
+            raise ValidationFailed("Le rapport SPD640-P est requis en mode bloquant.")
         return []
     return [reconcile_control_report(entries, spd640_path, config, required=require_spd640 or None)]
 
