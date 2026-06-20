@@ -24,6 +24,8 @@ if ($LASTEXITCODE -ne 0) {
     throw "La compilation Python a échoué avec le code $LASTEXITCODE"
 }
 
+.\scripts\build_exe.ps1 -Version $Version
+
 python scripts/generate_sbom.py --version $Version
 if ($LASTEXITCODE -ne 0) {
     throw "La génération du SBOM a échoué avec le code $LASTEXITCODE"
@@ -33,8 +35,6 @@ python scripts/extract_changelog.py --version $Version --include-diff --output "
 if ($LASTEXITCODE -ne 0) {
     throw "L'extraction du journal des changements a échoué avec le code $LASTEXITCODE"
 }
-
-.\scripts\build_exe.ps1 -Version $Version
 
 $PortableExe = "dist/EmployeurD-MegaGest/EmployeurD-MegaGest.exe"
 $PortableExeHash = (Get-FileHash -Algorithm SHA256 $PortableExe).Hash

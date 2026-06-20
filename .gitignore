@@ -3,14 +3,20 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.cache/
 *.egg-info/
 .venv/
 .venv-*/
 venv/
 ENV/
 .coverage
+.coverage.*
 htmlcov/
 .playwright-cli/
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
 
 .env
 .env.*
@@ -31,6 +37,7 @@ outputs/
 logs/
 dist/
 build/
+*.log
 
 *.mnd
 *.rapport.md

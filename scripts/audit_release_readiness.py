@@ -32,6 +32,8 @@ IGNORED_DIRS = {
     "__pycache__",
     "build",
     "dist",
+    "logs",
+    "notes-privees",
     "outputs",
     "venv",
     "ENV",
@@ -55,7 +57,9 @@ TEXT_SUFFIXES = {
 REQUIRED_GITIGNORE_PATTERNS = (
     ".env",
     ".env.*",
+    "notes-privees/",
     "outputs/",
+    "logs/",
     "dist/",
     "build/",
     "*.mnd",
