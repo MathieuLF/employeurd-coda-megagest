@@ -26,6 +26,13 @@ if ($LASTEXITCODE -ne 0) {
 
 .\scripts\build_exe.ps1 -Version $Version
 
+$PackageHash = python -c "import sys; sys.path.insert(0, 'src'); from pathlib import Path; from employeurd_megagest.integrity import app_package_sha256; print(app_package_sha256(Path('dist/EmployeurD-MegaGest')) or '')"
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($PackageHash)) {
+    throw "La génération de l'empreinte du paquet a échoué avec le code $LASTEXITCODE"
+}
+$PackageHash = $PackageHash.Trim()
+$PackageHash + "  EmployeurD-MegaGest-v$Version-package" | Set-Content -Encoding ascii "dist/EmployeurD-MegaGest-v$Version.package.sha256"
+
 python scripts/generate_sbom.py --version $Version
 if ($LASTEXITCODE -ne 0) {
     throw "La génération du SBOM a échoué avec le code $LASTEXITCODE"
@@ -47,6 +54,7 @@ $Security = "dist/EmployeurD-MegaGest-v$Version.security.md"
 - Données de paie: non incluses dans la mise en ligne.
 - Packager: cx_Freeze, paquet portable.
 - SHA256 exécutable: $PortableExeHash.
+- SHA256 paquet applicatif: $PackageHash.
 - Signature Windows: $($Signature.Status).
 - Conversion: locale.
 - Mise à jour: vérification explicite, sans envoi de fichiers.

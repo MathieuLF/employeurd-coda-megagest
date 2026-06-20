@@ -72,6 +72,7 @@ class ReconciliationResult:
     report_period: str | None
     source_dates: tuple[str, ...] = ()
     report_dates: tuple[str, ...] = ()
+    details: dict[str, str] = field(default_factory=dict)
     messages: list[ValidationMessage] = field(default_factory=list)
 
 

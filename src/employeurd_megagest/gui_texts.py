@@ -8,8 +8,8 @@ WEBSITE_URL = "https://mathieu.pro"
 REPOSITORY_URL = "https://github.com/MathieuLF/employeurd-coda-megagest"
 SUPPORT_EMAIL = "services@mathieu.pro"
 SUPPORT_ISSUE_URL = "https://github.com/MathieuLF/employeurd-coda-megagest/issues/new/choose"
-WEBSITE_LINK_TEXT = "🌐 Mathieu.PRO"
-REPOSITORY_LINK_TEXT = "🐙 Dépôt GitHub"
+WEBSITE_LINK_TEXT = "Mathieu.PRO"
+REPOSITORY_LINK_TEXT = "Dépôt GitHub"
 
 LEGAL_NOTICE_TEXT = (
     "EmployeurD, PG Solutions, MégaGest et les autres noms de produits ou de sociétés cités "
@@ -22,7 +22,7 @@ LEGAL_NOTICE_TEXT = (
 )
 
 SECURITY_NOTICE_TEXT = (
-    "Les fichiers EmployeurD, SPD640-P, MND, Markdown et JSON restent sur cet ordinateur. "
+    "Les fichiers EmployeurD, rapports de contrôle, MND, Markdown et JSON restent sur cet ordinateur. "
     "La vérification de mise à jour consulte seulement GitHub."
 )
 

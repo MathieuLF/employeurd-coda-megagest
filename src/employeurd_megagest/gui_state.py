@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .models import ConversionResult, ReconciliationResult, ValidationMessage
 from .output_plan import build_output_plan
+from .parser_employeurd import parse_employeurd_file
 
 
 MONEY_ZERO = Decimal("0.00")
@@ -102,10 +103,13 @@ def build_output_preview(
     if not writable:
         return OutputPreview(output_dir, detail="Le dossier de sortie ne semble pas accessible en écriture.", ok=False)
 
-    source_path = Path(source_value) if source_value.strip() else Path("conversion.txt")
+    source_path = Path(source_value) if source_value.strip() else Path("EmployeurD.txt")
+    entry_date, batch = _source_identity(source_path)
     plan = build_output_plan(
         source_path,
         output_dir,
+        entry_date=entry_date,
+        batch=batch,
         include_report=include_report,
         include_validation_json=include_validation_json,
     )
@@ -115,7 +119,7 @@ def build_output_preview(
         if path is not None
     )
     prefix = f"Sortie par défaut : {output_dir}" if using_default else f"Sortie choisie : {output_dir}"
-    detail = f"{prefix} - sous-dossier horodaté : {plan.directory.name}"
+    detail = f"{prefix}\nSous-dossier horodaté : {plan.directory.name}"
     return OutputPreview(plan.directory, files=files, detail=detail, ok=True)
 
 
@@ -124,7 +128,7 @@ def build_metrics(result: ConversionResult | None, reconciliations: list[Reconci
         return [
             ResultMetric("Fichiers", "En attente de vérification"),
             ResultMetric("MND", "Créé après une vérification réussie"),
-            ResultMetric("SPD640-P", "Facultatif, utile pour confirmer les totaux"),
+            ResultMetric("Rapport de contrôle", "Facultatif, utile pour confirmer ou compléter les contrôles"),
         ]
 
     delta = abs(result.total_debit - result.total_credit)
@@ -146,7 +150,7 @@ def build_metrics(result: ConversionResult | None, reconciliations: list[Reconci
             label = "OK" if reconciliation.status == "success" else "Écart"
             metrics.append(ResultMetric(reconciliation.report_type, f"{label} ({_format_money(reconciliation.debit_difference)} / {_format_money(reconciliation.credit_difference)})"))
     else:
-        metrics.append(ResultMetric("SPD640-P", "Non fourni / optionnel"))
+        metrics.append(ResultMetric("Rapport de contrôle", "Non fourni / optionnel"))
     return metrics
 
 
@@ -176,6 +180,18 @@ def _directory_probably_writable(path: Path) -> bool:
     if not target.exists():
         return False
     return os.access(target, os.W_OK)
+
+
+def _source_identity(path: Path):
+    if not path.exists() or not path.is_file():
+        return None, None
+    try:
+        entries = parse_employeurd_file(path)
+    except Exception:
+        return None, None
+    if not entries:
+        return None, None
+    return entries[0].entry_date, entries[0].batch
 
 
 def _format_size(size: int) -> str:

@@ -69,5 +69,6 @@ def _reconciliation_payload(reconciliation) -> dict[str, Any]:
         "report_period": reconciliation.report_period,
         "source_dates": list(reconciliation.source_dates),
         "report_dates": list(reconciliation.report_dates),
+        "details": dict(reconciliation.details),
         "messages": [asdict(message) for message in reconciliation.messages],
     }

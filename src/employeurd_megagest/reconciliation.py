@@ -6,6 +6,7 @@ from pathlib import Path
 from .config import AppConfig
 from .models import EmployeurDEntry, ReconciliationResult, ValidationMessage
 from .reports.spd640_parser import parse_spd640_csv, reconcile_spd640_with_source_totals
+from .reports.spd681_parser import parse_spd681_xml
 from .validator import source_totals
 
 
@@ -116,6 +117,145 @@ def reconcile_spd640(
         report_dates=report_dates,
         messages=messages,
     )
+
+
+def reconcile_spd681(
+    entries: list[EmployeurDEntry],
+    report_path: Path,
+    config: AppConfig,
+    *,
+    required: bool | None = None,
+) -> ReconciliationResult:
+    spd681_config = config.reports.spd681
+    is_required = _is_required(spd681_config.mode) if required is None else required
+    source_debit, source_credit = source_totals(entries)
+    if not spd681_config.enabled:
+        return ReconciliationResult(
+            report_type="SPD681",
+            status="skipped",
+            required=is_required,
+            report_path=report_path,
+            source_debit=source_debit,
+            source_credit=source_credit,
+            report_debit=ZERO,
+            report_credit=ZERO,
+            debit_difference=ZERO,
+            credit_difference=ZERO,
+            tolerance=spd681_config.tolerance,
+            debit_label="SPD681 désactivé",
+            credit_label="SPD681 désactivé",
+            source_batch=None,
+            report_batch=None,
+            source_period=None,
+            report_period=None,
+            messages=[ValidationMessage("info", "spd681_disabled", "Le rapprochement SPD681 est désactivé.")],
+        )
+
+    report = parse_spd681_xml(report_path)
+    source_batches = sorted({entry.batch for entry in entries})
+    source_dates = tuple(sorted({entry.entry_date.isoformat() for entry in entries}))
+    source_periods = sorted({entry.entry_date.strftime("%Y%m") for entry in entries})
+    source_batch = source_batches[0] if len(source_batches) == 1 else None
+    source_period = source_periods[0] if len(source_periods) == 1 else None
+    report_dates = (report.report_date.isoformat(),) if report.report_date else ()
+
+    messages = [
+        ValidationMessage(
+            "info",
+            "spd681_scope",
+            "Le SPD681 contrôle les écarts RRQ/AE/RQAP. Il ne remplace pas le SPD640-P pour les totaux débit/crédit.",
+        )
+    ]
+    severity = "error" if is_required else "warning"
+    if spd681_config.require_matching_batch and (not source_batch or not report.batch or source_batch != report.batch):
+        messages.append(
+            ValidationMessage(
+                severity,
+                "spd681_batch_mismatch",
+                f"Lot TXT {source_batch or 'n/d'} différent du lot SPD681 {report.batch or 'n/d'}.",
+            )
+        )
+    if spd681_config.require_matching_period and (not source_period or not report.period or source_period != report.period):
+        messages.append(
+            ValidationMessage(
+                severity,
+                "spd681_period_mismatch",
+                f"Période TXT {source_period or 'n/d'} différente de la période SPD681 {report.period or 'n/d'}.",
+            )
+        )
+    if spd681_config.require_matching_date and source_dates and report_dates and source_dates != report_dates:
+        messages.append(
+            ValidationMessage(
+                severity,
+                "spd681_date_mismatch",
+                "Les dates TXT et SPD681 ne concordent pas.",
+            )
+        )
+    if (
+        spd681_config.warn_on_reported_differences
+        and report.difference_threshold > ZERO
+        and report.max_absolute_difference >= report.difference_threshold
+    ):
+        messages.append(
+            ValidationMessage(
+                severity,
+                "spd681_reported_differences",
+                f"Le SPD681 contient {report.rows_with_reported_difference} ligne(s) avec écart; écart maximal {report.max_absolute_difference:.2f}.",
+            )
+        )
+
+    failed = any(message.severity == "error" for message in messages)
+    details = {
+        "rows": str(report.row_count),
+        "difference_threshold": f"{report.difference_threshold:.2f}",
+        "max_absolute_difference": f"{report.max_absolute_difference:.2f}",
+        "rows_with_reported_difference": str(report.rows_with_reported_difference),
+    }
+    for program, totals in report.totals_by_program.items():
+        details[f"{program}_eligible_earnings"] = f"{totals.eligible_earnings:.2f}"
+        details[f"{program}_paid"] = f"{totals.paid:.2f}"
+        details[f"{program}_expected"] = f"{totals.expected:.2f}"
+        details[f"{program}_difference"] = f"{totals.difference:.2f}"
+
+    return ReconciliationResult(
+        report_type="SPD681",
+        status="failed" if failed else "success",
+        required=is_required,
+        report_path=report_path,
+        source_debit=source_debit,
+        source_credit=source_credit,
+        report_debit=ZERO,
+        report_credit=ZERO,
+        debit_difference=ZERO,
+        credit_difference=ZERO,
+        tolerance=spd681_config.tolerance,
+        debit_label="Non applicable au SPD681",
+        credit_label="Non applicable au SPD681",
+        source_batch=source_batch,
+        report_batch=report.batch,
+        source_period=source_period,
+        report_period=report.period,
+        source_dates=source_dates,
+        report_dates=report_dates,
+        details=details,
+        messages=messages,
+    )
+
+
+def reconcile_control_report(
+    entries: list[EmployeurDEntry],
+    report_path: Path,
+    config: AppConfig,
+    *,
+    required: bool | None = None,
+) -> ReconciliationResult:
+    name = report_path.name.lower()
+    suffix = report_path.suffix.lower()
+    if "spd681" in name or suffix == ".xml":
+        return reconcile_spd681(entries, report_path, config, required=required)
+    if "spd640" in name or suffix == ".csv":
+        return reconcile_spd640(entries, report_path, config, required=required)
+    raise ValidationFailed("Type de rapport de contrôle non reconnu. Utilisez un SPD640-P CSV ou un SPD681 XML.")
 
 
 def reconciliation_failed(result: ReconciliationResult) -> bool:

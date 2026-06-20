@@ -1,9 +1,20 @@
 param(
     [string]$Name = "EmployeurD-MegaGest",
-    [string]$Version = "0.1.0"
+    [string]$Version = "0.1.0",
+    [string]$Python = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+$PythonExe = $Python
+if (-not $PythonExe) {
+    $BuildVenvPython = ".venv-build/Scripts/python.exe"
+    if (Test-Path -LiteralPath $BuildVenvPython) {
+        $PythonExe = (Resolve-Path -LiteralPath $BuildVenvPython).Path
+    } else {
+        $PythonExe = "python"
+    }
+}
 
 $Manifest = (Resolve-Path -LiteralPath "packaging/windows/EmployeurD-MegaGest.manifest").Path
 $Icon = (Resolve-Path -LiteralPath "packaging/windows/EmployeurD-MegaGest.ico").Path
@@ -15,7 +26,7 @@ Remove-Item -LiteralPath $TargetDir -Recurse -Force -ErrorAction SilentlyContinu
 Remove-Item -LiteralPath "dist/$Name.exe" -Force -ErrorAction SilentlyContinue
 Get-ChildItem -LiteralPath "dist" -Filter "$Name-v$Version*" -File -ErrorAction SilentlyContinue | Remove-Item -Force
 
-python -m cx_Freeze `
+& $PythonExe -m cx_Freeze `
     --script "src/employeurd_megagest/gui_entry.py" `
     --base gui `
     --target-name $Name `

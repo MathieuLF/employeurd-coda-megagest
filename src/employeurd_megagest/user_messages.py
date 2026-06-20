@@ -13,6 +13,10 @@ FRIENDLY_MESSAGES = {
     "spd640_amount_mismatch": "Le rapport SPD640-P ne concorde pas avec les totaux du fichier EmployeurD.",
     "spd640_batch_mismatch": "Le lot du rapport SPD640-P ne correspond pas au lot du fichier EmployeurD.",
     "spd640_period_mismatch": "La période du rapport SPD640-P ne correspond pas à la période du fichier EmployeurD.",
+    "spd681_batch_mismatch": "Le lot du rapport SPD681 ne correspond pas au lot du fichier EmployeurD.",
+    "spd681_period_mismatch": "La période du rapport SPD681 ne correspond pas à la période du fichier EmployeurD.",
+    "spd681_date_mismatch": "La date du rapport SPD681 ne correspond pas à la date du fichier EmployeurD.",
+    "spd681_reported_differences": "Le rapport SPD681 contient des écarts RRQ, assurance-emploi ou RQAP à examiner.",
     "validation_failed": "La validation ne peut pas continuer avec les options actuelles.",
 }
 

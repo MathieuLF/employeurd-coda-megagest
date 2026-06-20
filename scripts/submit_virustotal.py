@@ -30,7 +30,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.no_dotenv:
-        load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+        load_local_dotenv(Path(__file__).resolve().parents[1])
     api_key = args.api_key or os.environ.get("VT_API_KEY", "") or os.environ.get("VIRUSTOTAL_API_KEY", "")
     file_path = args.file
     sha256 = sha256_file(file_path)
@@ -108,6 +108,11 @@ def load_dotenv(path: Path) -> None:
         value = value.strip().strip('"').strip("'")
         if key and key not in os.environ:
             os.environ[key] = value
+
+
+def load_local_dotenv(root: Path) -> None:
+    for path in (root / "interne" / ".env", root / ".env"):
+        load_dotenv(path)
 
 
 def get_upload_url(api_key: str) -> str:

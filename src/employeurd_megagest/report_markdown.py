@@ -76,6 +76,10 @@ def build_markdown_report(result: ConversionResult) -> str:
             if reconciliation.messages:
                 lines.extend(_format_message(message) for message in reconciliation.messages)
                 lines.append("")
+            if reconciliation.details:
+                lines.append("Détails de contrôle:")
+                lines.extend(f"- {key}: {value}" for key, value in sorted(reconciliation.details.items()))
+                lines.append("")
     else:
         lines.append("- Aucun rapprochement fourni.")
 

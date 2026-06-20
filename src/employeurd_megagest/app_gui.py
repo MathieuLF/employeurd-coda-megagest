@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import queue
+import tempfile
 import threading
 import tkinter as tk
+import tkinter.font as tkfont
 import webbrowser
+from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -13,9 +16,7 @@ from .gui_controller import GuiController, GuiOperationResult
 from .gui_dialogs import show_legal_notice, show_report_preview, show_security_window, show_support_window, show_update_result
 from .gui_state import (
     build_file_preview,
-    build_metrics,
     build_output_preview,
-    blocking_messages,
     default_output_root,
     generated_files,
 )
@@ -36,6 +37,27 @@ from .resource_paths import default_config_dir, package_asset_path
 from .update_check import UpdateCheckResult, check_for_update
 from .user_messages import friendly_error_message, technical_error_message
 from .version import __version__
+
+
+_STATUS_ICON_CACHE: dict[str, tk.PhotoImage] | None = None
+
+
+def _status_icon_images() -> dict[str, tk.PhotoImage]:
+    global _STATUS_ICON_CACHE
+    if _STATUS_ICON_CACHE is not None:
+        return _STATUS_ICON_CACHE
+
+    icons: dict[str, tk.PhotoImage] = {}
+    for name in ("check", "shield", "warning", "error", "dot"):
+        path = package_asset_path(f"status-{name}.png")
+        if not path.exists():
+            continue
+        try:
+            icons[name] = tk.PhotoImage(file=str(path))
+        except tk.TclError:
+            continue
+    _STATUS_ICON_CACHE = icons
+    return icons
 
 
 class ModernScrollbar(tk.Canvas):
@@ -60,6 +82,11 @@ class ModernScrollbar(tk.Canvas):
     def set(self, first: str, last: str) -> None:
         self.first = max(0.0, min(1.0, float(first)))
         self.last = max(self.first, min(1.0, float(last)))
+        visible = max(0.0, min(1.0, self.last - self.first))
+        if self.first <= 0.02 and visible >= 0.98:
+            self.grid_remove()
+        else:
+            self.grid()
         self._redraw()
 
     def _redraw(self) -> None:
@@ -70,7 +97,7 @@ class ModernScrollbar(tk.Canvas):
         track_top = pad
         track_bottom = max(pad + 1, height - pad)
         track_height = track_bottom - track_top
-        self.create_line(x, track_top, x, track_bottom, fill="#e2e8f0", width=5, capstyle=tk.ROUND)
+        self.create_line(x, track_top, x, track_bottom, fill=Palette.border, width=5, capstyle=tk.ROUND)
 
         visible = max(0.05, min(1.0, self.last - self.first))
         thumb_height = max(44, track_height * visible)
@@ -102,6 +129,152 @@ class ModernScrollbar(tk.Canvas):
         y = min(max(event.y - self._drag_offset, pad), pad + max_travel)
         fraction = (y - pad) / max_travel
         self.command("moveto", fraction * (1.0 - visible))
+
+
+class StatusBadge(tk.Frame):
+    def __init__(self, parent: tk.Widget, text: str, *, icon: str = "dot") -> None:
+        super().__init__(
+            parent,
+            bd=0,
+            background=Palette.header,
+        )
+        self._text = text
+        self._icon = icon
+        self._bg, self._fg = status_colors("info")
+        self._font = tkfont.Font(family="Segoe UI", size=9, weight="bold")
+        self._icons = _status_icon_images()
+        self._icon_label = tk.Label(self, background=self._bg, bd=0)
+        self._icon_label.grid(row=0, column=0, padx=(9, 5), pady=5)
+        self._label = tk.Label(self, text=self._text, background=self._bg, foreground=self._fg, font=self._font, bd=0)
+        self._label.grid(row=0, column=1, padx=(0, 10), pady=5)
+        self._redraw()
+
+    def configure(self, cnf=None, **kwargs):  # noqa: ANN001
+        if cnf:
+            kwargs.update(cnf)
+        text = kwargs.pop("text", None)
+        icon = kwargs.pop("icon", None)
+        background = kwargs.pop("background", None)
+        foreground = kwargs.pop("foreground", None)
+        if text is not None:
+            self._text = str(text)
+        if icon is not None:
+            self._icon = str(icon)
+        if background is not None:
+            self._bg = str(background)
+        if foreground is not None:
+            self._fg = str(foreground)
+        if kwargs:
+            super().configure(**kwargs)
+        self._redraw()
+
+    config = configure
+
+    def _redraw(self) -> None:
+        super().configure(background=self._bg)
+        self._icon_label.configure(background=self._bg)
+        self._label.configure(text=self._text, background=self._bg, foreground=self._fg)
+        image = self._icons.get(self._icon) or self._icons.get("dot")
+        if image:
+            self._icon_label.configure(image=image, text="", width=18, height=18)
+            self._icon_label.image = image
+        else:
+            self._icon_label.configure(image="", text="●", foreground=self._fg, font=self._font, width=2)
+
+
+class CheckOption(tk.Frame):
+    def __init__(
+        self,
+        parent: tk.Widget,
+        *,
+        text: str,
+        variable: tk.BooleanVar,
+        command=None,
+        description: str = "",
+    ) -> None:
+        super().__init__(
+            parent,
+            bd=0,
+            background=Palette.surface,
+            highlightbackground=Palette.border,
+            highlightcolor=Palette.border,
+            highlightthickness=1,
+            padx=10,
+            pady=8,
+            cursor="hand2",
+        )
+        self.variable = variable
+        self.command = command
+        self._disabled = False
+        self.columnconfigure(1, weight=1)
+
+        self._box = tk.Canvas(self, width=19, height=19, highlightthickness=0, borderwidth=0, background=Palette.surface, cursor="hand2")
+        self._box.grid(row=0, column=0, rowspan=2, sticky="n", padx=(0, 8), pady=(1, 0))
+        self._title = tk.Label(
+            self,
+            text=text,
+            background=Palette.surface,
+            foreground=Palette.text,
+            font=("Segoe UI Semibold", 9),
+            anchor="w",
+            justify="left",
+            cursor="hand2",
+        )
+        self._title.grid(row=0, column=1, sticky="ew")
+        self._description = tk.Label(
+            self,
+            text=description,
+            background=Palette.surface,
+            foreground=Palette.muted,
+            font=("Segoe UI", 8),
+            anchor="w",
+            justify="left",
+            wraplength=220,
+            cursor="hand2",
+        )
+        if description:
+            self._description.grid(row=1, column=1, sticky="ew", pady=(1, 0))
+
+        for widget in (self, self._box, self._title, self._description):
+            widget.bind("<Button-1>", self._toggle)
+        self.variable.trace_add("write", lambda *_: self._redraw())
+        self._redraw()
+
+    def state(self, states: list[str] | tuple[str, ...]) -> tuple[str, ...]:
+        if "disabled" in states:
+            self._disabled = True
+        if "!disabled" in states:
+            self._disabled = False
+        self._redraw()
+        return ("disabled",) if self._disabled else ()
+
+    def _toggle(self, _event=None) -> None:
+        if self._disabled:
+            return
+        self.variable.set(not self.variable.get())
+        if self.command:
+            self.command()
+
+    def _redraw(self) -> None:
+        checked = self.variable.get()
+        bg = Palette.disabled_bg if self._disabled else Palette.info_bg if checked else Palette.surface
+        border = Palette.disabled_bg if self._disabled else Palette.primary if checked else Palette.border
+        fg = Palette.disabled if self._disabled else Palette.text
+        muted = Palette.disabled if self._disabled else Palette.muted
+        cursor = "arrow" if self._disabled else "hand2"
+
+        self.configure(background=bg, highlightbackground=border, cursor=cursor)
+        self._box.configure(background=bg, cursor=cursor)
+        self._title.configure(background=bg, foreground=fg, cursor=cursor)
+        self._description.configure(background=bg, foreground=muted, cursor=cursor)
+
+        self._box.delete("all")
+        outline = Palette.disabled if self._disabled else Palette.primary if checked else Palette.border_strong
+        fill = Palette.primary if checked and not self._disabled else Palette.surface
+        self._box.create_rectangle(2, 2, 17, 17, fill=fill, outline=outline, width=1)
+        if checked:
+            color = "#ffffff" if not self._disabled else Palette.disabled
+            self._box.create_line(6, 10, 9, 13, 14, 6, fill=color, width=2, capstyle=tk.ROUND, joinstyle=tk.ROUND)
 
 
 class ScrollableFrame(ttk.Frame):
@@ -153,15 +326,14 @@ class EmployeurDMegaGestApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title(f"EmployeurD-MegaGest {__version__}")
-        self.geometry("1180x760")
-        self.minsize(900, 560)
+        self._set_initial_geometry()
         self._set_product_icon()
 
         self.controller = GuiController(config_dir=default_config_dir())
         self.preferences = load_preferences()
         self.source_path = tk.StringVar()
         self.spd640_path = tk.StringVar()
-        self.output_dir = tk.StringVar(value=self.preferences.output_dir)
+        self.output_dir = tk.StringVar(value=_usable_saved_output_dir(self.preferences.output_dir))
         self.require_spd640 = tk.BooleanVar(value=False)
         self.write_report_md = tk.BooleanVar(value=False)
         self.write_validation_json = tk.BooleanVar(value=False)
@@ -173,7 +345,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         self.last_error: Exception | None = None
         self.last_update_result: UpdateCheckResult | None = None
         self.busy = False
-        self.activity_log: list[str] = ["Prêt. Ajoutez l'écriture EmployeurD pour commencer."]
+        self.activity_log: list[str] = [_timestamped("Ouverture de l'application. Ajoutez l'écriture EmployeurD pour commencer.")]
         self._task_queue: queue.Queue[tuple[bool, object]] = queue.Queue()
         self._task_on_success = None
 
@@ -186,12 +358,22 @@ class EmployeurDMegaGestApp(tk.Tk):
             self.after(750, lambda: self._check_update(show_dialog=False))
 
     def _set_product_icon(self) -> None:
-        icon_path = package_asset_path("app-icon.png")
-        if not icon_path.exists():
-            return
+        icon_paths = [
+            package_asset_path("app-icon-16.png"),
+            package_asset_path("app-icon-32.png"),
+            package_asset_path("app-icon-48.png"),
+            package_asset_path("app-icon.png"),
+        ]
         try:
-            self._window_icon = tk.PhotoImage(file=str(icon_path))
-            self.iconphoto(True, self._window_icon)
+            self._window_icons = [tk.PhotoImage(file=str(path)) for path in icon_paths if path.exists()]
+            if self._window_icons:
+                self.iconphoto(True, *self._window_icons)
+            header_path = package_asset_path("app-icon-40.png")
+            fallback_path = package_asset_path("app-icon-48.png")
+            if header_path.exists():
+                self._header_icon = tk.PhotoImage(file=str(header_path))
+            elif fallback_path.exists():
+                self._header_icon = tk.PhotoImage(file=str(fallback_path))
         except tk.TclError:
             pass
 
@@ -200,18 +382,18 @@ class EmployeurDMegaGestApp(tk.Tk):
         self.rowconfigure(1, weight=1)
 
         self._build_header().grid(row=0, column=0, sticky="ew")
-        self.scroll_area = ScrollableFrame(self, padding=(12, 12, 12, 10))
+        self.scroll_area = ScrollableFrame(self, padding=(16, 14, 16, 10))
         self.scroll_area.grid(row=1, column=0, sticky="nsew")
         body = self.scroll_area.content
-        body.columnconfigure(0, weight=5)
-        body.columnconfigure(1, weight=4)
+        body.columnconfigure(0, weight=7)
+        body.columnconfigure(1, weight=5)
         body.rowconfigure(0, weight=1)
 
         left = ttk.Frame(body, style="App.TFrame")
-        left.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
         left.columnconfigure(0, weight=1)
-        self._build_inputs_card(left).grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        self._build_validation_card(left).grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        self._build_inputs_card(left).grid(row=0, column=0, sticky="ew", pady=(0, 9))
+        self._build_validation_card(left).grid(row=1, column=0, sticky="ew", pady=(0, 9))
         self._build_output_card(left).grid(row=2, column=0, sticky="ew")
 
         right = ttk.Frame(body, style="App.TFrame")
@@ -220,57 +402,66 @@ class EmployeurDMegaGestApp(tk.Tk):
         right.rowconfigure(0, weight=1)
         self._build_dashboard_card(right).grid(row=0, column=0, sticky="nsew")
 
-        self._build_action_bar().grid(row=2, column=0, sticky="ew", padx=10, pady=(0, 6))
-        self._build_footer().grid(row=3, column=0, sticky="ew", padx=10, pady=(0, 8))
+        self._build_action_bar().grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 8))
+        self._build_footer().grid(row=3, column=0, sticky="ew", padx=18, pady=(0, 10))
 
         for variable in (self.source_path, self.spd640_path):
             variable.trace_add("write", lambda *_: self._mark_dirty())
         self.output_dir.trace_add("write", lambda *_: self._refresh_all())
 
     def _build_header(self) -> ttk.Frame:
-        header = ttk.Frame(self, style="Header.TFrame", padding=(16, 10))
+        header = ttk.Frame(self, style="Header.TFrame", padding=(18, 12))
         header.columnconfigure(0, weight=1)
-        ttk.Label(header, text=APP_DISPLAY_NAME, style="HeaderTitle.TLabel").grid(row=0, column=0, sticky="w")
+        brand = ttk.Frame(header, style="Header.TFrame")
+        brand.grid(row=0, column=0, sticky="w")
+        brand.columnconfigure(1, weight=1)
+        if hasattr(self, "_header_icon"):
+            tk.Label(brand, image=self._header_icon, background=Palette.header, bd=0).grid(row=0, column=0, rowspan=2, padx=(0, 12))
+        ttk.Label(brand, text=APP_DISPLAY_NAME, style="HeaderTitle.TLabel").grid(row=0, column=1, sticky="w")
         ttk.Label(
-            header,
+            brand,
             text=APP_SUBTITLE,
             style="HeaderMeta.TLabel",
-        ).grid(row=1, column=0, sticky="w", pady=(4, 0))
+        ).grid(row=1, column=1, sticky="w", pady=(3, 0))
 
         badges = ttk.Frame(header, style="Header.TFrame")
-        badges.grid(row=0, column=1, rowspan=2, sticky="e")
-        self.status_badge = tk.Label(badges, text="Prêt", padx=16, pady=7, font=("Segoe UI Semibold", 11), bd=0)
-        self.status_badge.grid(row=0, column=0)
+        badges.grid(row=0, column=1, rowspan=2, sticky="ne", padx=(14, 0))
+        self.status_badge = _badge_label(badges, "Prêt")
+        self.security_badge = _badge_label(badges, "Sécurité")
+        self.update_badge = _badge_label(badges, "Version")
+        self.status_badge.grid(row=0, column=0, padx=(0, 8))
+        self.security_badge.grid(row=0, column=1, padx=(0, 8))
+        self.update_badge.grid(row=0, column=2)
         return header
 
     def _build_inputs_card(self, parent: ttk.Frame) -> ttk.Frame:
         card = _card(parent)
-        _card_title(card, "1", "EmployeurD", "Regroupez l'écriture détaillée et, si disponible, son rapport de totaux.").grid(row=0, column=0, columnspan=3, sticky="ew")
+        _card_title(card, "1", "Fichiers EmployeurD", "Ajoutez le TXT de paie. Un rapport de contrôle peut compléter la vérification.").grid(row=0, column=0, columnspan=3, sticky="ew")
         card.columnconfigure(1, weight=1)
 
-        ttk.Label(card, text="Écriture EmployeurD standard (TXT)", style="Title.TLabel").grid(row=1, column=0, columnspan=3, sticky="w", pady=(8, 1))
+        ttk.Label(card, text="Écriture détaillée EmployeurD (TXT) · obligatoire", style="Title.TLabel").grid(row=1, column=0, columnspan=3, sticky="w", pady=(7, 1))
         ttk.Label(
             card,
-            text="Ajoutez l'écriture détaillée de EmployeurD, au format TXT.",
+            text="Fichier obligatoire à convertir en MND.",
             style="SmallMuted.TLabel",
-            wraplength=520,
+            wraplength=430,
             justify="left",
-        ).grid(row=2, column=0, columnspan=3, sticky="ew", pady=(0, 3))
+        ).grid(row=2, column=0, columnspan=3, sticky="ew", pady=(0, 2))
         ttk.Entry(card, textvariable=self.source_path).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(3, 0))
         self.source_button = ttk.Button(card, text=Text.choose, command=self._choose_source, style="Action.TButton")
         self.source_button.grid(row=3, column=2, sticky="e", padx=(10, 0), pady=(3, 0))
-        self.source_meta = ttk.Label(card, text="", style="SmallMuted.TLabel", wraplength=520, justify="left")
+        self.source_meta = ttk.Label(card, text="", style="SmallMuted.TLabel", wraplength=430, justify="left")
         self.source_meta.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(4, 0))
 
-        ttk.Separator(card).grid(row=5, column=0, columnspan=3, sticky="ew", pady=6)
-        ttk.Label(card, text="Rapport de totaux SPD640-P (CSV, facultatif)", style="Title.TLabel").grid(row=6, column=0, columnspan=3, sticky="w")
+        ttk.Separator(card).grid(row=5, column=0, columnspan=3, sticky="ew", pady=5)
+        ttk.Label(card, text="Rapport de contrôle (CSV ou XML) · facultatif", style="Title.TLabel").grid(row=6, column=0, columnspan=3, sticky="w")
         ttk.Label(
             card,
-            text="Le SPD640-P peut confirmer les totaux avec l'écriture et corroborer les soldes.",
+            text="SPD640-P confirme les débits/crédits. SPD681 contrôle les écarts RRQ/AE/RQAP.",
             style="SmallMuted.TLabel",
-            wraplength=520,
+            wraplength=430,
             justify="left",
-        ).grid(row=7, column=0, columnspan=3, sticky="ew", pady=(2, 3))
+        ).grid(row=7, column=0, columnspan=3, sticky="ew", pady=(1, 2))
         ttk.Entry(card, textvariable=self.spd640_path).grid(row=8, column=0, columnspan=2, sticky="ew", pady=(5, 0))
         spd_actions = ttk.Frame(card, style="CardBody.TFrame")
         spd_actions.grid(row=8, column=2, sticky="e", padx=(10, 0), pady=(5, 0))
@@ -278,88 +469,109 @@ class EmployeurDMegaGestApp(tk.Tk):
         self.spd640_button.grid(row=0, column=0, padx=(0, 6))
         self.clear_spd640_button = ttk.Button(spd_actions, text=Text.remove, command=self._clear_spd640, style="Quiet.TButton")
         self.clear_spd640_button.grid(row=0, column=1)
-        self.spd640_meta = ttk.Label(card, text="", style="SmallMuted.TLabel", wraplength=520, justify="left")
+        self.spd640_meta = ttk.Label(card, text="", style="SmallMuted.TLabel", wraplength=430, justify="left")
         self.spd640_meta.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(4, 0))
         return card
 
     def _build_validation_card(self, parent: ttk.Frame) -> ttk.Frame:
         card = _card(parent)
-        _card_title(card, "2", "Contrôle des soldes", "Décidez si le rapport SPD640-P doit bloquer la création du MND.").grid(row=0, column=0, sticky="ew")
-        self.validation_mode_label = ttk.Label(card, text="", style="Body.TLabel", wraplength=520, justify="left")
-        self.validation_mode_label.grid(row=1, column=0, sticky="ew", pady=(7, 2))
-        self.require_spd640_check = ttk.Checkbutton(
+        _card_title(card, "2", "Concordance", "Avec un rapport de contrôle, vous pouvez bloquer la création si un contrôle échoue.").grid(row=0, column=0, sticky="ew")
+        self.validation_mode_label = ttk.Label(card, text="", style="Body.TLabel", wraplength=430, justify="left")
+        self.validation_mode_label.grid(row=1, column=0, sticky="ew", pady=(6, 5))
+        self.require_spd640_check = CheckOption(
             card,
-            text="Exiger la concordance du SPD640-P avant de créer le MND",
             variable=self.require_spd640,
             command=self._mark_dirty,
+            text="Exiger la concordance du rapport",
+            description="Si un contrôle obligatoire échoue, le MND ne sera pas créé.",
         )
-        self.require_spd640_check.grid(row=2, column=0, sticky="w", pady=(5, 0))
+        self.require_spd640_check.grid(row=2, column=0, sticky="ew", pady=(2, 0))
         return card
 
     def _build_output_card(self, parent: ttk.Frame) -> ttk.Frame:
         card = _card(parent)
-        _card_title(card, "3", "Sortie", "Choisissez le dossier de destination. Un sous-dossier horodaté sera créé.").grid(row=0, column=0, columnspan=3, sticky="ew")
+        _card_title(card, "3", "Destination", "Choisissez le dossier parent. L'application créera le sous-dossier horodaté.").grid(row=0, column=0, columnspan=3, sticky="ew")
         card.columnconfigure(0, weight=1)
         ttk.Entry(card, textvariable=self.output_dir).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         self.output_button = ttk.Button(card, text=Text.choose, command=self._choose_output_dir, style="Action.TButton")
         self.output_button.grid(row=1, column=2, sticky="e", padx=(10, 0), pady=(8, 0))
-        self.output_meta = ttk.Label(card, text="", style="SmallMuted.TLabel", wraplength=520, justify="left")
+        self.output_meta = ttk.Label(card, text="", style="SmallMuted.TLabel", wraplength=430, justify="left")
         self.output_meta.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(5, 0))
-        self.output_files = ttk.Label(card, text="", style="SmallMuted.TLabel", wraplength=520, justify="left")
+        self.output_files = ttk.Label(card, text="", style="SmallMuted.TLabel", wraplength=430, justify="left")
         self.output_files.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(4, 0))
         options = ttk.Frame(card, style="CardBody.TFrame")
-        options.grid(row=4, column=0, columnspan=3, sticky="w", pady=(6, 0))
-        ttk.Checkbutton(
+        options.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        options.columnconfigure(0, weight=1)
+        options.columnconfigure(1, weight=1)
+        self.report_option = CheckOption(
             options,
-            text="Créer aussi le rapport Markdown (.md)",
             variable=self.write_report_md,
+            text="Rapport Markdown (.md)",
+            description="Résumé lisible de la vérification.",
             command=self._refresh_all,
-        ).grid(row=0, column=0, sticky="w", padx=(0, 14))
-        ttk.Checkbutton(
+        )
+        self.report_option.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        self.json_option = CheckOption(
             options,
-            text="Créer aussi le fichier de validation (.json)",
             variable=self.write_validation_json,
+            text="Validation JSON (.json)",
+            description="Détails structurés pour audit ou support.",
             command=self._refresh_all,
-        ).grid(row=0, column=1, sticky="w")
+        )
+        self.json_option.grid(row=0, column=1, sticky="ew")
         return card
 
     def _build_dashboard_card(self, parent: ttk.Frame) -> ttk.Frame:
         card = _card(parent)
         card.rowconfigure(4, weight=1)
         card.columnconfigure(0, weight=1)
-        ttk.Label(card, text="Suivi de la conversion", style="PanelEyebrow.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(card, textvariable=self.status, style="StatusTitle.TLabel", wraplength=440, justify="left").grid(row=1, column=0, sticky="ew", pady=(4, 0))
-        ttk.Label(card, textvariable=self.status_detail, style="Muted.TLabel", wraplength=440, justify="left").grid(row=2, column=0, sticky="ew", pady=(4, 8))
+        ttk.Label(card, text="Journal de traitement", style="PanelEyebrow.TLabel").grid(row=0, column=0, sticky="w")
+        tk.Label(
+            card,
+            textvariable=self.status,
+            background=Palette.surface,
+            foreground=Palette.text,
+            font=("Segoe UI Semibold", 13),
+            anchor="w",
+            justify="left",
+            wraplength=390,
+        ).grid(row=1, column=0, sticky="ew", pady=(7, 1))
+        tk.Label(
+            card,
+            textvariable=self.status_detail,
+            background=Palette.surface,
+            foreground=Palette.muted,
+            font=("Segoe UI", 9),
+            anchor="w",
+            justify="left",
+            wraplength=390,
+        ).grid(row=2, column=0, sticky="ew", pady=(0, 7))
         self.progress = ttk.Progressbar(card, mode="indeterminate")
         self.progress.grid(row=3, column=0, sticky="ew", pady=(0, 8))
         self.progress.grid_remove()
 
-        notebook = ttk.Notebook(card)
-        notebook.grid(row=4, column=0, sticky="nsew")
-
-        summary_tab = ttk.Frame(notebook, style="CardBody.TFrame", padding=(0, 8, 0, 0))
-        problems_tab = ttk.Frame(notebook, style="CardBody.TFrame", padding=(0, 8, 0, 0))
-        log_tab = ttk.Frame(notebook, style="CardBody.TFrame", padding=(0, 8, 0, 0))
-        for tab in (summary_tab, problems_tab, log_tab):
-            tab.columnconfigure(0, weight=1)
-            tab.rowconfigure(0, weight=1)
-
-        self.metrics_text = _dashboard_text(summary_tab, height=15)
-        self.metrics_text.grid(row=0, column=0, sticky="nsew")
-        self.errors_text = _dashboard_text(problems_tab, height=15)
-        self.errors_text.grid(row=0, column=0, sticky="nsew")
-        self.log_text = _dashboard_text(log_tab, height=15, font_size=9)
-        self.log_text.grid(row=0, column=0, sticky="nsew")
-
-        notebook.add(summary_tab, text="Résumé")
-        notebook.add(problems_tab, text="À corriger")
-        notebook.add(log_tab, text="Journal")
+        journal_panel = _subpanel(card)
+        journal_panel.grid(row=4, column=0, sticky="nsew")
+        journal_panel.rowconfigure(1, weight=1)
+        journal_panel.columnconfigure(0, weight=1)
+        _panel_title(journal_panel, "Journal").grid(row=0, column=0, sticky="w", pady=(0, 5))
+        self.log_text = _dashboard_text(journal_panel, height=18, font_size=9)
+        self.log_text.grid(row=1, column=0, sticky="nsew")
         return card
 
     def _build_action_bar(self) -> ttk.Frame:
-        bar = ttk.Frame(self, style="ActionBar.TFrame", padding=(12, 10))
+        bar = tk.Frame(
+            self,
+            background=Palette.surface,
+            highlightbackground=Palette.border,
+            highlightcolor=Palette.border,
+            highlightthickness=1,
+            bd=0,
+            padx=14,
+            pady=11,
+        )
         bar.columnconfigure(1, weight=1)
-        primary = ttk.Frame(bar, style="ActionBar.TFrame")
+        primary = ttk.Frame(bar, style="CardBody.TFrame")
         primary.grid(row=0, column=0, sticky="w")
         self.validate_button = ttk.Button(primary, text=Text.validate_payroll, command=self._validate, style="Primary.TButton")
         self.generate_button = ttk.Button(primary, text=Text.generate_mnd, command=self._generate, style="Action.TButton")
@@ -369,18 +581,12 @@ class EmployeurDMegaGestApp(tk.Tk):
         reason = ttk.Label(bar, textvariable=self.disabled_reason, style="SurfaceFooter.TLabel", wraplength=340, justify="left")
         reason.grid(row=0, column=1, sticky="w", padx=14)
 
-        secondary = ttk.Frame(bar, style="ActionBar.TFrame")
+        secondary = ttk.Frame(bar, style="CardBody.TFrame")
         secondary.grid(row=0, column=2, sticky="e")
         self.report_button = ttk.Button(secondary, text=Text.open_report, command=self._show_report, style="Action.TButton")
         self.folder_button = ttk.Button(secondary, text=Text.open_folder, command=self._open_folder, style="Action.TButton")
-        self.security_button = ttk.Button(secondary, text=Text.security, command=self._show_security, style="Action.TButton")
-        self.support_button = ttk.Button(secondary, text=Text.support, command=self._show_support, style="Action.TButton")
-        self.update_button = ttk.Button(secondary, text=Text.check_updates, command=lambda: self._check_update(show_dialog=True), style="Quiet.TButton")
         self.report_button.grid(row=0, column=0, padx=(0, 8))
-        self.folder_button.grid(row=0, column=1, padx=(0, 8))
-        self.security_button.grid(row=0, column=2, padx=(0, 8))
-        self.support_button.grid(row=0, column=3, padx=(0, 8))
-        self.update_button.grid(row=0, column=4)
+        self.folder_button.grid(row=0, column=1)
         return bar
 
     def _build_footer(self) -> ttk.Frame:
@@ -390,9 +596,13 @@ class EmployeurDMegaGestApp(tk.Tk):
         ttk.Label(footer, textvariable=self.update_status, style="Footer.TLabel").grid(row=0, column=1, sticky="e", padx=(0, 18))
         links = ttk.Frame(footer, style="App.TFrame")
         links.grid(row=0, column=2, sticky="e")
-        _link_label(links, Text.legal, lambda: show_legal_notice(self)).grid(row=0, column=0, padx=(0, 14))
-        _link_label(links, WEBSITE_LINK_TEXT, lambda: webbrowser.open(WEBSITE_URL)).grid(row=0, column=1, padx=(0, 14))
-        _link_label(links, REPOSITORY_LINK_TEXT, lambda: webbrowser.open(REPOSITORY_URL)).grid(row=0, column=2)
+        _link_label(links, Text.legal, lambda: show_legal_notice(self)).grid(row=0, column=0, padx=(0, 12))
+        _link_label(links, WEBSITE_LINK_TEXT, lambda: webbrowser.open(WEBSITE_URL)).grid(row=0, column=1, padx=(0, 12))
+        _link_label(links, REPOSITORY_LINK_TEXT, lambda: webbrowser.open(REPOSITORY_URL)).grid(row=0, column=2, padx=(0, 12))
+        _link_label(links, Text.security, self._show_security).grid(row=0, column=3, padx=(0, 12))
+        _link_label(links, Text.support, self._show_support).grid(row=0, column=4, padx=(0, 12))
+        self.update_button = ttk.Button(links, text=Text.check_updates, command=lambda: self._check_update(show_dialog=True), style="Quiet.TButton")
+        self.update_button.grid(row=0, column=5)
         return footer
 
     def _bind_shortcuts(self) -> None:
@@ -415,19 +625,19 @@ class EmployeurDMegaGestApp(tk.Tk):
 
     def _choose_spd640(self) -> None:
         selected = filedialog.askopenfilename(
-            title="Choisir un rapport SPD640-P",
-            filetypes=[("Fichiers CSV", "*.csv *.CSV"), ("Tous les fichiers", "*.*")],
+            title="Choisir un rapport de contrôle",
+            filetypes=[("Rapports de contrôle", "*.csv *.CSV *.xml *.XML"), ("Tous les fichiers", "*.*")],
         )
         if selected:
             self.spd640_path.set(selected)
-            self.require_spd640.set(True)
-            self._log_event(f"Rapport SPD640-P sélectionné : {Path(selected).name}")
+            self.require_spd640.set(_control_report_kind(selected) == "SPD640-P")
+            self._log_event(f"Rapport de contrôle sélectionné : {Path(selected).name}")
             self._refresh_all()
 
     def _clear_spd640(self) -> None:
         self.spd640_path.set("")
         self.require_spd640.set(False)
-        self._log_event("Rapport SPD640-P retiré.")
+        self._log_event("Rapport de contrôle retiré.")
         self._mark_dirty()
 
     def _choose_output_dir(self) -> None:
@@ -594,11 +804,28 @@ class EmployeurDMegaGestApp(tk.Tk):
             return
         config = load_app_config(default_config_dir())
         update_url = str(config.updates.get("url", ""))
-        self._run_background(
-            "Vérification de mise à jour",
-            lambda: check_for_update(update_url),
-            lambda result: self._update_check_finished(result, show_dialog=show_dialog),
-        )
+        self.update_status.set("Vérification de mise à jour...")
+        self.update_button.configure(text=Text.check_updates)
+        self.update_button.state(["disabled"])
+        self._refresh_update_badge()
+        result_queue: queue.Queue[UpdateCheckResult] = queue.Queue()
+
+        def worker() -> None:
+            result_queue.put(check_for_update(update_url))
+
+        def poll() -> None:
+            try:
+                result = result_queue.get_nowait()
+            except queue.Empty:
+                if self.winfo_exists():
+                    self.after(100, poll)
+                return
+            if self.winfo_exists():
+                self.update_button.state(["!disabled"])
+                self._update_check_finished(result, show_dialog=show_dialog)
+
+        threading.Thread(target=worker, daemon=True).start()
+        self.after(100, poll)
 
     def _update_check_finished(self, result: UpdateCheckResult, *, show_dialog: bool) -> None:
         self.last_update_result = result
@@ -609,19 +836,14 @@ class EmployeurDMegaGestApp(tk.Tk):
             self.update_button.configure(text=Text.update_available)
             self._log_event("Mise à jour disponible.")
         elif result.ok:
-            if not self.last_result:
-                self.status.set("Application à jour")
-                self.status_detail.set("Aucune mise à jour disponible.")
             self.update_status.set("Application à jour")
             self.update_button.configure(text=Text.up_to_date)
             self._log_event("Vérification terminée : application à jour.")
         else:
-            if not self.last_result:
-                self.status.set("Mise à jour non vérifiée")
-                self.status_detail.set("La vérification de mise à jour n'a pas pu être complétée. L'application demeure utilisable.")
             self.update_status.set("Mise à jour non vérifiée")
             self.update_button.configure(text=Text.check_updates)
             self._log_event("Vérification de mise à jour impossible. L'application demeure utilisable.")
+        self._refresh_update_badge()
         if show_dialog:
             show_update_result(self, result)
 
@@ -641,7 +863,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         if not output_preview.ok:
             raise ConversionError(output_preview.detail)
         if self.require_spd640.get() and not self.spd640_path.get().strip():
-            raise ValidationFailed("Le rapport SPD640-P est requis en mode bloquant.")
+            raise ValidationFailed("Le rapport de contrôle est requis en mode bloquant.")
 
     def _mark_dirty(self) -> None:
         if self.busy:
@@ -654,7 +876,7 @@ class EmployeurDMegaGestApp(tk.Tk):
 
     def _refresh_all(self) -> None:
         source_preview = build_file_preview(self.source_path.get(), label="EmployeurD", suffixes=(".txt",), optional=False)
-        spd_preview = build_file_preview(self.spd640_path.get(), label="SPD640-P", suffixes=(".csv",), optional=True)
+        spd_preview = build_file_preview(self.spd640_path.get(), label="Rapport de contrôle", suffixes=(".csv", ".xml"), optional=True)
         output_preview = build_output_preview(
             self.source_path.get(),
             self.output_dir.get(),
@@ -677,52 +899,74 @@ class EmployeurDMegaGestApp(tk.Tk):
         can_generate = self._can_generate()
         self.validate_button.state(["!disabled"] if can_validate else ["disabled"])
         self.generate_button.state(["!disabled"] if can_generate else ["disabled"])
+        self.validate_button.configure(style="Action.TButton" if can_generate else "Primary.TButton")
+        self.generate_button.configure(style="Primary.TButton" if can_generate else "Action.TButton")
         self.report_button.state(["!disabled"] if self.last_result else ["disabled"])
         folder_available = bool(generated_files(self.last_result.conversion) if self.last_result and self.last_result.conversion else False) or self._resolved_output_root().exists()
         self.folder_button.state(["!disabled"] if folder_available and not self.busy else ["disabled"])
         self.source_button.state(["disabled"] if self.busy else ["!disabled"])
         self.spd640_button.state(["disabled"] if self.busy else ["!disabled"])
         self.output_button.state(["disabled"] if self.busy else ["!disabled"])
+        self.report_option.state(["disabled"] if self.busy else ["!disabled"])
+        self.json_option.state(["disabled"] if self.busy else ["!disabled"])
         if self.busy:
             self.progress.grid()
         else:
             self.progress.grid_remove()
 
-        self.validation_mode_label.configure(text=_validation_mode_text(has_spd640, self.require_spd640.get()))
+        self.validation_mode_label.configure(
+            text=_validation_mode_text(has_spd640, self.require_spd640.get(), _control_report_kind(self.spd640_path.get()))
+        )
         self.disabled_reason.set(self._disabled_reason(can_validate, can_generate))
         self._refresh_dashboard()
         self._refresh_status_badge()
 
     def _refresh_dashboard(self) -> None:
-        conversion = self.last_result.conversion if self.last_result else None
-        metrics = build_metrics(conversion, self.last_result.reconciliations if self.last_result else None)
-        _set_text(self.metrics_text, "\n".join(f"{metric.label}: {metric.value}" for metric in metrics))
-
-        errors = []
-        if self.last_error:
-            errors.append(friendly_error_message(self.last_error))
-        errors.extend(blocking_messages(conversion))
-        if errors:
-            _set_text(self.errors_text, "\n".join(errors))
-        else:
-            _set_text(self.errors_text, "Aucune erreur bloquante connue.")
-        _set_text(self.log_text, "\n".join(f"- {line}" for line in self.activity_log[-6:]))
+        if hasattr(self, "log_text"):
+            _set_text(self.log_text, "\n".join(self.activity_log))
 
     def _refresh_status_badge(self) -> None:
         if self.busy:
-            label, status = "En cours", "warning"
+            label, status, icon = "En cours", "warning", "warning"
         elif self.last_error:
-            label, status = "À corriger", "error"
+            label, status, icon = "À corriger", "error", "error"
         elif self.last_result and self.last_result.conversion and self.last_result.conversion.output_path:
-            label, status = "MND créé", "success"
+            label, status, icon = "MND créé", "success", "check"
         elif self.last_result:
-            label, status = "Validé", "success"
+            label, status, icon = "Validé", "success", "check"
         elif self.source_path.get().strip():
-            label, status = "À valider", "warning"
+            label, status, icon = "À valider", "warning", "warning"
         else:
-            label, status = "Prêt", "info"
+            label, status, icon = "Prêt", "success", "check"
         bg, fg = status_colors(status)
-        self.status_badge.configure(text=label, background=bg, foreground=fg)
+        self.status_badge.configure(text=label, icon=icon, background=bg, foreground=fg)
+        success_bg, success_fg = status_colors("success")
+        self.security_badge.configure(text="Sécurité", icon="shield", background=success_bg, foreground=success_fg)
+        self._refresh_update_badge()
+
+    def _refresh_update_badge(self) -> None:
+        if not hasattr(self, "update_badge"):
+            return
+        if self.last_update_result and self.last_update_result.update_available:
+            label, status, icon = "Mise à jour", "warning", "warning"
+        elif self.last_update_result and self.last_update_result.ok:
+            label, status, icon = "À jour", "success", "check"
+        elif self.last_update_result and not self.last_update_result.ok:
+            label, status, icon = "Version ?", "warning", "warning"
+        else:
+            label, status, icon = "Version ?", "warning", "warning"
+        bg, fg = status_colors(status)
+        self.update_badge.configure(text=label, icon=icon, background=bg, foreground=fg)
+
+    def _set_initial_geometry(self) -> None:
+        screen_width = max(1, self.winfo_screenwidth())
+        screen_height = max(1, self.winfo_screenheight())
+        width = max(1180, min(1360, int(screen_width * 0.9)))
+        height = max(760, min(940, int(screen_height * 0.9)))
+        x = max(0, int((screen_width - width) / 2))
+        y = max(0, int((screen_height - height) / 2))
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.minsize(1080, 720)
 
     def _can_validate(self) -> bool:
         if self.busy:
@@ -769,9 +1013,9 @@ class EmployeurDMegaGestApp(tk.Tk):
         return Path(output) if output else default_output_root()
 
     def _log_event(self, message: str) -> None:
-        self.activity_log.append(message)
+        self.activity_log.append(_timestamped(message))
         if hasattr(self, "log_text"):
-            _set_text(self.log_text, "\n".join(f"- {line}" for line in self.activity_log[-6:]))
+            self._refresh_dashboard()
 
 
 def _optional_path(value: str) -> Path | None:
@@ -779,17 +1023,41 @@ def _optional_path(value: str) -> Path | None:
     return Path(cleaned) if cleaned else None
 
 
-def _card(parent: ttk.Frame) -> ttk.Frame:
-    frame = ttk.Frame(parent, style="Card.TFrame", padding=12)
-    frame.columnconfigure(0, weight=1)
+def _usable_saved_output_dir(value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        return ""
+    path = Path(cleaned)
+    temp_root = Path(tempfile.gettempdir())
+    try:
+        if path.resolve().is_relative_to(temp_root.resolve()):
+            return ""
+    except OSError:
+        return ""
+    return cleaned
+
+
+def _card(parent: ttk.Frame) -> tk.Frame:
+    frame = tk.Frame(
+        parent,
+        background=Palette.surface,
+        highlightbackground=Palette.border,
+        highlightcolor=Palette.border,
+        highlightthickness=1,
+        bd=0,
+        padx=14,
+        pady=12,
+    )
+    frame.grid_columnconfigure(0, weight=1)
     return frame
 
 
 def _card_title(parent: ttk.Frame, step: str, title: str, subtitle: str) -> ttk.Frame:
     frame = ttk.Frame(parent, style="CardBody.TFrame")
-    frame.columnconfigure(0, weight=1)
-    ttk.Label(frame, text=f"{step}. {title}", style="Title.TLabel").grid(row=0, column=0, sticky="w")
-    ttk.Label(frame, text=subtitle, style="SmallMuted.TLabel", wraplength=500).grid(row=1, column=0, sticky="ew", pady=(2, 0))
+    frame.columnconfigure(1, weight=1)
+    ttk.Label(frame, text=step, style="StepBadge.TLabel").grid(row=0, column=0, rowspan=2, sticky="n", padx=(0, 10), pady=(1, 0))
+    ttk.Label(frame, text=title, style="Title.TLabel").grid(row=0, column=1, sticky="w")
+    ttk.Label(frame, text=subtitle, style="SmallMuted.TLabel", wraplength=500).grid(row=1, column=1, sticky="ew", pady=(1, 0))
     return frame
 
 
@@ -799,25 +1067,75 @@ def _link_label(parent: tk.Widget, text: str, command) -> ttk.Label:
     return label
 
 
+def _badge_label(parent: tk.Widget, text: str) -> StatusBadge:
+    return StatusBadge(parent, text)
+
+
+def _subpanel(parent: tk.Widget) -> tk.Frame:
+    panel = tk.Frame(
+        parent,
+        background=Palette.surface_alt,
+        highlightbackground=Palette.border,
+        highlightcolor=Palette.border,
+        highlightthickness=1,
+        bd=0,
+        padx=12,
+        pady=9,
+    )
+    panel.columnconfigure(1, weight=1)
+    return panel
+
+
+def _panel_title(parent: tk.Widget, text: str) -> tk.Label:
+    return tk.Label(
+        parent,
+        text=text,
+        background=Palette.surface_alt,
+        foreground=Palette.primary_dark,
+        font=("Segoe UI Semibold", 9),
+    )
+
+
 def _dashboard_text(parent: tk.Widget, *, height: int, font_size: int = 10) -> tk.Text:
     return tk.Text(
         parent,
         height=height,
         wrap="word",
         borderwidth=0,
-        padx=9,
-        pady=8,
+        relief="flat",
+        highlightbackground=Palette.border,
+        highlightcolor=Palette.border,
+        highlightthickness=1,
+        padx=14,
+        pady=12,
         font=("Segoe UI", font_size),
-        background=Palette.surface,
+        background=Palette.surface_alt,
+        foreground=Palette.text,
+        cursor="arrow",
     )
 
-
-def _validation_mode_text(has_spd640: bool, strict: bool) -> str:
+def _validation_mode_text(has_report: bool, strict: bool, report_kind: str) -> str:
     if strict:
-        return "Le SPD640-P est obligatoire. Si les totaux ne concordent pas, le MND ne sera pas créé."
-    if has_spd640:
-        return "Le SPD640-P sera comparé aux totaux de l'écriture avant la création du MND."
-    return "Le TXT sera vérifié seul. Ajoutez le SPD640-P pour comparer les totaux de paie."
+        return f"{report_kind} est obligatoire. Si un contrôle échoue, le MND ne sera pas créé."
+    if has_report and report_kind == "SPD640-P":
+        return "Le SPD640-P sera comparé aux totaux débit/crédit de l'écriture avant la création du MND."
+    if has_report and report_kind == "SPD681":
+        return "Le SPD681 sera lu comme contrôle RRQ/AE/RQAP. Il ne remplace pas le SPD640-P pour les débits/crédits."
+    if has_report:
+        return "Le rapport fourni sera vérifié avant la création du MND."
+    return "Le TXT sera vérifié seul. Ajoutez un SPD640-P pour confirmer les totaux de paie."
+
+
+def _control_report_kind(value: str) -> str:
+    path = Path(value.strip()) if value.strip() else None
+    if not path:
+        return "rapport de contrôle"
+    name = path.name.lower()
+    if "spd681" in name or path.suffix.lower() == ".xml":
+        return "SPD681"
+    if "spd640" in name or path.suffix.lower() == ".csv":
+        return "SPD640-P"
+    return "rapport de contrôle"
 
 
 def _generated_outputs_message(result: GuiOperationResult) -> str:
@@ -873,11 +1191,15 @@ def _output_files_text(files: tuple[str, ...]) -> str:
     return "Fichiers à créer :\n" + "\n".join(f"- {name}" for name in files)
 
 
+def _timestamped(message: str) -> str:
+    return f"{datetime.now().strftime('%H:%M:%S')} - {message}"
+
+
 def _file_preview_text(preview) -> str:
     if preview.status == "success":
         return ""
     if preview.path is None:
-        return preview.title
+        return ""
     return f"{preview.title} : {preview.detail}"
 
 
@@ -892,7 +1214,14 @@ def _set_optional_label(label: ttk.Label, text: str) -> None:
 def _set_text(widget: tk.Text, value: str) -> None:
     widget.configure(state="normal")
     widget.delete("1.0", "end")
-    widget.insert("1.0", value)
+    widget.tag_configure("section", font=("Segoe UI Semibold", 10), foreground=Palette.primary_dark, spacing1=7, spacing3=3)
+    widget.tag_configure("error", foreground=Palette.danger)
+    sections = {"Résumé", "Contrôles", "Rapport et validation", "Journal"}
+    for line in value.splitlines():
+        normalized = line.lower()
+        is_error = "à corriger" in normalized or ("erreur" in normalized and "aucune erreur" not in normalized)
+        tag = "section" if line in sections else "error" if is_error else ""
+        widget.insert("end", line + "\n", (tag,) if tag else ())
     widget.configure(state="disabled")
 
 

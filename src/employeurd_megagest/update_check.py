@@ -70,21 +70,16 @@ def check_for_update(url: str, *, current_version: str = __version__, timeout: f
             resolved_url,
             message="La réponse de mise à jour est incomplète.",
         )
-    update_available = _version_tuple(latest) > _version_tuple(current_version)
-    sha256 = extract_sha256(payload.get("sha256"))
-    if not sha256:
-        sha256_url = release_asset_url(payload, ".exe.sha256", version=latest)
-        if sha256_url:
-            try:
-                sha256 = extract_sha256(_fetch_text(sha256_url, timeout=timeout))
-            except (OSError, urllib.error.URLError, TimeoutError):
-                sha256 = None
     download_url = (
         payload.get("download_url")
         or release_asset_url(payload, ".zip", version=latest)
         or release_asset_url(payload, ".exe", version=latest)
         or payload.get("html_url")
     )
+    update_available = _version_tuple(latest) > _version_tuple(current_version)
+    sha256 = extract_sha256(payload.get("sha256"))
+    if not sha256:
+        sha256 = _release_download_sha256(payload, download_url, version=latest, timeout=timeout)
     return UpdateCheckResult(
         ok=True,
         update_available=update_available,
@@ -150,6 +145,38 @@ def release_asset(payload: dict[str, Any], suffix: str, *, version: str | None =
 def extract_sha256(value: object) -> str | None:
     match = SHA256_RE.search(str(value or ""))
     return match.group(0).lower() if match else None
+
+
+def _release_download_sha256(
+    payload: dict[str, Any],
+    download_url: object,
+    *,
+    version: str,
+    timeout: float,
+) -> str | None:
+    suffixes: list[str] = []
+    lowered_download = str(download_url or "").lower()
+    if lowered_download.endswith(".zip"):
+        suffixes.append(".zip.sha256")
+    if lowered_download.endswith(".exe"):
+        suffixes.append(".exe.sha256")
+    suffixes.extend([".zip.sha256", ".exe.sha256"])
+
+    seen: set[str] = set()
+    for suffix in suffixes:
+        if suffix in seen:
+            continue
+        seen.add(suffix)
+        sha256_url = release_asset_url(payload, suffix, version=version)
+        if not sha256_url:
+            continue
+        try:
+            found = extract_sha256(_fetch_text(sha256_url, timeout=timeout))
+        except (OSError, urllib.error.URLError, TimeoutError):
+            found = None
+        if found:
+            return found
+    return None
 
 
 def _fetch_json(url: str, *, timeout: float) -> dict[str, Any]:

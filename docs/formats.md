@@ -46,3 +46,9 @@ Par défaut, l'application retire le premier chiffre du compte EmployeurD de 11 
 ```text
 50213000140 -> 0213000140
 ```
+
+## Rapports de contrôle
+
+Le rapport `SPD640-P` en CSV sert à comparer les totaux débit/crédit de la paie avec le TXT EmployeurD.
+
+Le rapport `SPD681` en XML sert plutôt à lire les contrôles RRQ, assurance-emploi et RQAP. Il confirme le lot, la période et les écarts de cotisations, mais il ne remplace pas le SPD640-P pour valider les soldes du MND.

@@ -32,6 +32,7 @@ IGNORED_DIRS = {
     "__pycache__",
     "build",
     "dist",
+    "interne",
     "logs",
     "notes-privees",
     "outputs",
@@ -57,6 +58,7 @@ TEXT_SUFFIXES = {
 REQUIRED_GITIGNORE_PATTERNS = (
     ".env",
     ".env.*",
+    "interne/",
     "notes-privees/",
     "outputs/",
     "logs/",
@@ -68,7 +70,9 @@ REQUIRED_GITIGNORE_PATTERNS = (
 )
 BLOCKED_TRACKED_PATTERNS = (
     re.compile(r"(^|/)\.env(\..*)?$"),
+    re.compile(r"(^|/)interne/"),
     re.compile(r"(^|/)(outputs|logs|dist|build)/"),
+    re.compile(r"(^|/)scripts/generate_icon\.ps1$"),
     re.compile(r"\.(mnd|p12|pfx|pem|key)$", re.IGNORECASE),
     re.compile(r"\.(rapport\.md|validation\.json)$", re.IGNORECASE),
 )

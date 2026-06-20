@@ -22,6 +22,7 @@ Thumbs.db
 .env.*
 !.env.example
 !.env.*.example
+interne/
 *.pem
 *.key
 *.p12

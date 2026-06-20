@@ -10,7 +10,7 @@ from .models import ConversionResult, ReconciliationResult
 from .audit_log import write_audit_event
 from .output_plan import OutputPlan, build_output_plan
 from .parser_employeurd import parse_employeurd_file
-from .reconciliation import reconcile_spd640, reconciliation_failed
+from .reconciliation import reconcile_control_report, reconciliation_failed
 from .resource_paths import default_config_dir
 from .validator import validate_source_entries
 
@@ -70,6 +70,8 @@ class GuiController:
         output_plan = build_output_plan(
             source_path,
             output_root,
+            entry_date=entries[0].entry_date,
+            batch=entries[0].batch,
             include_report=write_report,
             include_validation_json=write_validation_json,
         )
@@ -109,9 +111,9 @@ class GuiController:
 def _build_reconciliations(entries, spd640_path: Path | None, config, require_spd640: bool) -> list[ReconciliationResult]:
     if not spd640_path:
         if require_spd640:
-            raise ValidationFailed("Le rapport SPD640-P est requis en mode bloquant.")
+            raise ValidationFailed("Le rapport de contrôle est requis en mode bloquant.")
         return []
-    return [reconcile_spd640(entries, spd640_path, config, required=require_spd640 or None)]
+    return [reconcile_control_report(entries, spd640_path, config, required=require_spd640 or None)]
 
 
 def _raise_if_required_reconciliation_failed(reconciliations: list[ReconciliationResult]) -> None:

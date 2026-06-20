@@ -35,15 +35,21 @@ class IntegrityCheckResult:
 
 def local_integrity_details(*, executable_path: Path | None = None, current_version: str = __version__) -> IntegrityCheckResult:
     executable = Path(executable_path or sys.executable)
+    local_sha256 = app_package_sha256(executable.parent) if _looks_like_frozen_app(executable) else sha256_file(executable)
+    message = (
+        "Empreinte locale de l'application calculée. La comparaison officielle n'a pas encore été lancée."
+        if _looks_like_frozen_app(executable)
+        else "Empreinte locale calculée. La comparaison officielle n'a pas encore été lancée."
+    )
     return IntegrityCheckResult(
         status="local",
         current_version=current_version,
         executable_path=executable,
-        local_sha256=sha256_file(executable),
+        local_sha256=local_sha256,
         expected_sha256=None,
         signature_status=signature_status(executable),
         release_url=None,
-        message="Empreinte locale calculée. La comparaison officielle n'a pas encore été lancée.",
+        message=message,
     )
 
 
@@ -91,8 +97,17 @@ def check_running_app_integrity(
             release_url=release_url,
         )
 
-    expected = extract_sha256(payload.get("sha256"))
+    expected_kind = "package"
+    expected = extract_sha256(payload.get("package_sha256"))
     if not expected:
+        sha256_url = release_asset_url(payload, ".package.sha256", version=current_version)
+        if sha256_url:
+            try:
+                expected = extract_sha256(_fetch_text(sha256_url, timeout=timeout))
+            except (OSError, urllib.error.URLError, TimeoutError):
+                expected = None
+    if not expected:
+        expected_kind = "exe"
         sha256_url = release_asset_url(payload, ".exe.sha256", version=current_version)
         if sha256_url:
             try:
@@ -107,7 +122,8 @@ def check_running_app_integrity(
             release_url=release_url,
         )
 
-    if local.local_sha256.lower() == expected.lower():
+    actual = local.local_sha256 if expected_kind == "package" else sha256_file(local.executable_path)
+    if actual and actual.lower() == expected.lower():
         return _with_status(
             local,
             "verified",
@@ -133,6 +149,38 @@ def sha256_file(path: Path) -> str | None:
         return digest.hexdigest()
     except OSError:
         return None
+
+
+def app_package_sha256(root: Path) -> str | None:
+    try:
+        files = sorted(
+            path
+            for path in root.rglob("*")
+            if path.is_file() and not path.name.lower().endswith(".package.sha256")
+        )
+    except OSError:
+        return None
+    if not files:
+        return None
+
+    digest = hashlib.sha256()
+    for path in files:
+        try:
+            relative = path.relative_to(root).as_posix().lower()
+        except ValueError:
+            return None
+        file_hash = sha256_file(path)
+        if not file_hash:
+            return None
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(file_hash.encode("ascii"))
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _looks_like_frozen_app(executable: Path) -> bool:
+    return (executable.parent / "lib" / "library.zip").exists()
 
 
 def signature_status(path: Path) -> str:

@@ -34,3 +34,11 @@ reports:
           codes:
             - "305"
           sign: 1
+  spd681:
+    enabled: true
+    mode: "advisory"
+    tolerance: "0.00"
+    require_matching_batch: true
+    require_matching_period: true
+    require_matching_date: false
+    warn_on_reported_differences: true

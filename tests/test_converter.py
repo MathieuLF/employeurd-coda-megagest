@@ -7,7 +7,7 @@ import json
 import os
 import subprocess
 import urllib.error
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
@@ -18,10 +18,10 @@ from employeurd_megagest.config import load_app_config
 from employeurd_megagest.converter import convert_file
 from employeurd_megagest.audit_log import write_audit_event
 from employeurd_megagest.errors import ValidationFailed
-from employeurd_megagest.app_gui import _generated_outputs_message
+from employeurd_megagest.app_gui import _generated_outputs_message, _usable_saved_output_dir
 from employeurd_megagest.gui_controller import GuiController, GuiOperationResult
 from employeurd_megagest.gui_state import GuiViewState, build_file_preview, build_metrics, build_output_preview, default_output_root
-from employeurd_megagest.integrity import IntegrityCheckResult, check_running_app_integrity
+from employeurd_megagest.integrity import IntegrityCheckResult, app_package_sha256, check_running_app_integrity
 from employeurd_megagest.output_plan import build_output_plan
 from employeurd_megagest.parser_employeurd import parse_employeurd_file, parse_employeurd_line
 from employeurd_megagest.parser_mnd import parse_mnd_file, parse_mnd_text
@@ -32,8 +32,9 @@ from employeurd_megagest.preferences import (
     remember_update_check_on_startup,
     save_preferences,
 )
-from employeurd_megagest.reconciliation import reconcile_spd640, reconciliation_failed
+from employeurd_megagest.reconciliation import reconcile_control_report, reconcile_spd640, reconcile_spd681, reconciliation_failed
 from employeurd_megagest.reports.spd640_parser import parse_spd640_csv, reconcile_spd640_with_source_totals
+from employeurd_megagest.reports.spd681_parser import parse_spd681_xml
 from employeurd_megagest.resource_paths import package_asset_path
 from employeurd_megagest.update_check import DEFAULT_UPDATE_URL, check_for_update
 from employeurd_megagest.validator import convert_account, mnd_totals, source_totals
@@ -227,6 +228,78 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertEqual(totals.other_totals["type_g_montants"], Decimal("1250.50"))
         self.assertEqual(totals.other_totals["type_d_montants"], Decimal("100.00"))
 
+    def test_parse_spd681_synthetic_report(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        report = parse_spd681_xml(root / "samples" / "OPD_RP_00005678_SPD681_SYNTHETIQUE.XML")
+        totals = report.to_payroll_totals()
+
+        self.assertEqual(report.row_count, 2)
+        self.assertEqual(report.batch, "00005678")
+        self.assertEqual(report.period, "202606")
+        self.assertEqual(report.difference_threshold, Decimal("1.00"))
+        self.assertEqual(report.max_absolute_difference, Decimal("0.00"))
+        self.assertEqual(totals.other_totals["rrq_paid"], Decimal("375.02"))
+        self.assertEqual(totals.other_totals["ae_paid"], Decimal("81.25"))
+        self.assertEqual(totals.other_totals["rqap_paid"], Decimal("26.88"))
+
+    def test_reconcile_spd681_control_report(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        config = self.config()
+        entries = parse_employeurd_file(root / "samples" / "employeurd-spd681-balanced.txt")
+        report = root / "samples" / "OPD_RP_00005678_SPD681_SYNTHETIQUE.XML"
+
+        result = reconcile_spd681(entries, report, config, required=False)
+
+        self.assertEqual(result.report_type, "SPD681")
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.source_debit, Decimal("6250.25"))
+        self.assertEqual(result.details["rrq_paid"], "375.02")
+        self.assertTrue(any(message.code == "spd681_scope" for message in result.messages))
+
+    def test_required_spd681_reported_difference_blocks(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        config = self.config()
+        entries = parse_employeurd_file(root / "samples" / "employeurd-spd681-balanced.txt")
+        report = root / "samples" / "OPD_RP_00005678_SPD681_ECART_SYNTHETIQUE.XML"
+
+        result = reconcile_spd681(entries, report, config, required=True)
+
+        self.assertTrue(reconciliation_failed(result))
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.details["max_absolute_difference"], "2.00")
+
+    def test_control_report_auto_detects_spd681_xml(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        config = self.config()
+        entries = parse_employeurd_file(root / "samples" / "employeurd-spd681-balanced.txt")
+        report = root / "samples" / "OPD_RP_00005678_SPD681_SYNTHETIQUE.XML"
+
+        result = reconcile_control_report(entries, report, config, required=False)
+
+        self.assertEqual(result.report_type, "SPD681")
+        self.assertEqual(result.status, "success")
+
+    def test_conversion_artifacts_include_spd681_details(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        config = self.config()
+        source = root / "samples" / "employeurd-spd681-balanced.txt"
+        report = root / "samples" / "OPD_RP_00005678_SPD681_SYNTHETIQUE.XML"
+        entries = parse_employeurd_file(source)
+        reconciliation = reconcile_control_report(entries, report, config, required=False)
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output.mnd"
+            result = convert_file(source, output, config, reconciliations=[reconciliation])
+            payload = json.loads(output.with_suffix(".validation.json").read_text(encoding="utf-8"))
+            markdown = output.with_suffix(".rapport.md").read_text(encoding="utf-8")
+
+        self.assertEqual(result.reconciliations[0].report_type, "MND")
+        self.assertEqual(result.reconciliations[0].status, "success")
+        spd681_payload = next(item for item in payload["reconciliations"] if item["report_type"] == "SPD681")
+        self.assertEqual(spd681_payload["details"]["rrq_paid"], "375.02")
+        self.assertIn("SPD681", markdown)
+        self.assertIn("Détails de contrôle", markdown)
+
     def test_reconcile_spd640_with_source_totals(self) -> None:
         root = Path(__file__).resolve().parents[1]
         config = self.config()
@@ -335,6 +408,18 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertEqual(second.directory.name, "20260618-123000-2")
         self.assertEqual(first.mnd_path.name, "GL_2026.mnd")
 
+    def test_output_plan_uses_entry_date_and_batch_for_mnd_name(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            plan = build_output_plan(
+                Path("source.txt"),
+                Path(directory),
+                now=datetime(2026, 6, 18, 12, 30, 0),
+                entry_date=date(2026, 6, 15),
+                batch="00001234",
+            )
+
+        self.assertEqual(plan.mnd_path.name, "EmployeurD_20260615_lot_00001234.mnd")
+
     def test_output_plan_can_skip_optional_artifact_paths(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             plan = build_output_plan(
@@ -396,12 +481,12 @@ class EmployeurDMegaGestTest(unittest.TestCase):
                         "browser_download_url": "https://example.invalid/app-portable.zip",
                     },
                     {
-                        "name": "EmployeurD-MegaGest-v0.1.1-portable.exe.sha256",
-                        "browser_download_url": "https://example.invalid/app.exe.sha256",
+                        "name": "EmployeurD-MegaGest-v0.1.1-portable.zip.sha256",
+                        "browser_download_url": "https://example.invalid/app.zip.sha256",
                     },
                 ],
             }
-            fetch_text.return_value = f"{expected_hash.upper()}  EmployeurD-MegaGest.exe"
+            fetch_text.return_value = f"{expected_hash.upper()}  EmployeurD-MegaGest-v0.1.1-portable.zip"
 
             result = check_for_update(DEFAULT_UPDATE_URL, current_version="0.1.0")
 
@@ -432,7 +517,7 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertIn("Aucune mise en ligne officielle", result.message)
 
-    def test_integrity_check_compares_running_executable_to_release_hash(self) -> None:
+    def test_integrity_check_compares_running_package_to_release_hash(self) -> None:
         expected_hash = "b" * 64
         local = IntegrityCheckResult(
             status="local",
@@ -453,18 +538,33 @@ class EmployeurDMegaGestTest(unittest.TestCase):
                 "tag_name": "v0.1.0",
                 "assets": [
                     {
-                        "name": "EmployeurD-MegaGest-v0.1.0.exe.sha256",
-                        "browser_download_url": "https://example.invalid/app.exe.sha256",
+                        "name": "EmployeurD-MegaGest-v0.1.0.package.sha256",
+                        "browser_download_url": "https://example.invalid/app.package.sha256",
                     }
                 ],
             }
-            fetch_text.return_value = f"{expected_hash.upper()}  EmployeurD-MegaGest.exe"
+            fetch_text.return_value = f"{expected_hash.upper()}  EmployeurD-MegaGest-v0.1.0-package"
 
             result = check_running_app_integrity(DEFAULT_UPDATE_URL, current_version="0.1.0", frozen=True)
 
         self.assertTrue(result.verified)
         self.assertEqual(result.expected_sha256, expected_hash)
         self.assertTrue(result.release_url.endswith("/releases/tags/v0.1.0"))
+
+    def test_package_integrity_hash_changes_when_package_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "lib").mkdir()
+            (root / "lib" / "library.zip").write_text("version 1", encoding="utf-8")
+            (root / "EmployeurD-MegaGest.exe").write_text("launcher", encoding="utf-8")
+
+            first = app_package_sha256(root)
+            (root / "lib" / "library.zip").write_text("version 2", encoding="utf-8")
+            second = app_package_sha256(root)
+
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(second)
+        self.assertNotEqual(first, second)
 
     def test_preferences_default_blank_and_persist_output_dir(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -499,7 +599,12 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertIn(".mnd", "\n".join(output_preview.files))
         self.assertTrue(default_preview.ok)
         self.assertEqual(default_preview.directory.parent, default_output_root())
-        self.assertEqual(default_preview.files, ("employeurd-balanced.mnd",))
+        self.assertEqual(default_preview.files, ("EmployeurD_20260618_lot_00001234.mnd",))
+
+    def test_gui_ignores_temporary_saved_output_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(_usable_saved_output_dir(directory), "")
+        self.assertEqual(_usable_saved_output_dir("C:/Sorties"), "C:/Sorties")
 
     def test_gui_state_rejects_output_path_that_is_file(self) -> None:
         root = Path(__file__).resolve().parents[1]
