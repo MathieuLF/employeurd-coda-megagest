@@ -199,8 +199,8 @@ class CheckOption(tk.Frame):
             highlightbackground=Palette.border,
             highlightcolor=Palette.border,
             highlightthickness=1,
-            padx=10,
-            pady=8,
+            padx=9,
+            pady=6,
             cursor="hand2",
         )
         self.variable = variable
@@ -229,7 +229,7 @@ class CheckOption(tk.Frame):
             font=("Segoe UI", 8),
             anchor="w",
             justify="left",
-            wraplength=220,
+            wraplength=240,
             cursor="hand2",
         )
         if description:
@@ -382,7 +382,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         self.rowconfigure(1, weight=1)
 
         self._build_header().grid(row=0, column=0, sticky="ew")
-        self.scroll_area = ScrollableFrame(self, padding=(16, 14, 16, 10))
+        self.scroll_area = ScrollableFrame(self, padding=(14, 10, 14, 6))
         self.scroll_area.grid(row=1, column=0, sticky="nsew")
         body = self.scroll_area.content
         body.columnconfigure(0, weight=7)
@@ -392,8 +392,8 @@ class EmployeurDMegaGestApp(tk.Tk):
         left = ttk.Frame(body, style="App.TFrame")
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
         left.columnconfigure(0, weight=1)
-        self._build_inputs_card(left).grid(row=0, column=0, sticky="ew", pady=(0, 9))
-        self._build_validation_card(left).grid(row=1, column=0, sticky="ew", pady=(0, 9))
+        self._build_inputs_card(left).grid(row=0, column=0, sticky="ew", pady=(0, 7))
+        self._build_validation_card(left).grid(row=1, column=0, sticky="ew", pady=(0, 7))
         self._build_output_card(left).grid(row=2, column=0, sticky="ew")
 
         right = ttk.Frame(body, style="App.TFrame")
@@ -402,15 +402,15 @@ class EmployeurDMegaGestApp(tk.Tk):
         right.rowconfigure(0, weight=1)
         self._build_dashboard_card(right).grid(row=0, column=0, sticky="nsew")
 
-        self._build_action_bar().grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 8))
-        self._build_footer().grid(row=3, column=0, sticky="ew", padx=18, pady=(0, 10))
+        self._build_action_bar().grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 6))
+        self._build_footer().grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 6))
 
         for variable in (self.source_path, self.spd640_path):
             variable.trace_add("write", lambda *_: self._mark_dirty())
         self.output_dir.trace_add("write", lambda *_: self._refresh_all())
 
     def _build_header(self) -> ttk.Frame:
-        header = ttk.Frame(self, style="Header.TFrame", padding=(18, 12))
+        header = ttk.Frame(self, style="Header.TFrame", padding=(16, 9))
         header.columnconfigure(0, weight=1)
         brand = ttk.Frame(header, style="Header.TFrame")
         brand.grid(row=0, column=0, sticky="w")
@@ -426,9 +426,9 @@ class EmployeurDMegaGestApp(tk.Tk):
 
         badges = ttk.Frame(header, style="Header.TFrame")
         badges.grid(row=0, column=1, rowspan=2, sticky="ne", padx=(14, 0))
-        self.status_badge = _badge_label(badges, "Prêt")
-        self.security_badge = _badge_label(badges, "Sécurité")
-        self.update_badge = _badge_label(badges, "Version")
+        self.status_badge = _badge_label(badges, "Paie à préparer")
+        self.security_badge = _badge_label(badges, "Sécurité OK")
+        self.update_badge = _badge_label(badges, "Version à vérifier")
         self.status_badge.grid(row=0, column=0, padx=(0, 8))
         self.security_badge.grid(row=0, column=1, padx=(0, 8))
         self.update_badge.grid(row=0, column=2)
@@ -439,21 +439,21 @@ class EmployeurDMegaGestApp(tk.Tk):
         _card_title(card, "1", "Fichiers EmployeurD", "Ajoutez le TXT de paie. Un rapport de contrôle peut compléter la vérification.").grid(row=0, column=0, columnspan=3, sticky="ew")
         card.columnconfigure(1, weight=1)
 
-        ttk.Label(card, text="Écriture détaillée EmployeurD (TXT) · obligatoire", style="Title.TLabel").grid(row=1, column=0, columnspan=3, sticky="w", pady=(7, 1))
+        ttk.Label(card, text="Écriture détaillée EmployeurD (TXT) · obligatoire", style="Title.TLabel").grid(row=1, column=0, columnspan=3, sticky="w", pady=(5, 0))
         ttk.Label(
             card,
             text="Fichier obligatoire à convertir en MND.",
             style="SmallMuted.TLabel",
             wraplength=430,
             justify="left",
-        ).grid(row=2, column=0, columnspan=3, sticky="ew", pady=(0, 2))
-        ttk.Entry(card, textvariable=self.source_path).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(3, 0))
+        ).grid(row=2, column=0, columnspan=3, sticky="ew", pady=(0, 1))
+        ttk.Entry(card, textvariable=self.source_path).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(2, 0))
         self.source_button = ttk.Button(card, text=Text.choose, command=self._choose_source, style="Action.TButton")
         self.source_button.grid(row=3, column=2, sticky="e", padx=(10, 0), pady=(3, 0))
         self.source_meta = ttk.Label(card, text="", style="SmallMuted.TLabel", wraplength=430, justify="left")
         self.source_meta.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(4, 0))
 
-        ttk.Separator(card).grid(row=5, column=0, columnspan=3, sticky="ew", pady=5)
+        ttk.Separator(card).grid(row=5, column=0, columnspan=3, sticky="ew", pady=4)
         ttk.Label(card, text="Rapport de contrôle (CSV ou XML) · facultatif", style="Title.TLabel").grid(row=6, column=0, columnspan=3, sticky="w")
         ttk.Label(
             card,
@@ -461,10 +461,10 @@ class EmployeurDMegaGestApp(tk.Tk):
             style="SmallMuted.TLabel",
             wraplength=430,
             justify="left",
-        ).grid(row=7, column=0, columnspan=3, sticky="ew", pady=(1, 2))
-        ttk.Entry(card, textvariable=self.spd640_path).grid(row=8, column=0, columnspan=2, sticky="ew", pady=(5, 0))
+        ).grid(row=7, column=0, columnspan=3, sticky="ew", pady=(1, 1))
+        ttk.Entry(card, textvariable=self.spd640_path).grid(row=8, column=0, columnspan=2, sticky="ew", pady=(3, 0))
         spd_actions = ttk.Frame(card, style="CardBody.TFrame")
-        spd_actions.grid(row=8, column=2, sticky="e", padx=(10, 0), pady=(5, 0))
+        spd_actions.grid(row=8, column=2, sticky="e", padx=(10, 0), pady=(3, 0))
         self.spd640_button = ttk.Button(spd_actions, text=Text.choose, command=self._choose_spd640, style="Action.TButton")
         self.spd640_button.grid(row=0, column=0, padx=(0, 6))
         self.clear_spd640_button = ttk.Button(spd_actions, text=Text.remove, command=self._clear_spd640, style="Quiet.TButton")
@@ -477,7 +477,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         card = _card(parent)
         _card_title(card, "2", "Concordance", "Avec un rapport de contrôle, vous pouvez bloquer la création si un contrôle échoue.").grid(row=0, column=0, sticky="ew")
         self.validation_mode_label = ttk.Label(card, text="", style="Body.TLabel", wraplength=430, justify="left")
-        self.validation_mode_label.grid(row=1, column=0, sticky="ew", pady=(6, 5))
+        self.validation_mode_label.grid(row=1, column=0, sticky="ew", pady=(5, 4))
         self.require_spd640_check = CheckOption(
             card,
             variable=self.require_spd640,
@@ -492,15 +492,15 @@ class EmployeurDMegaGestApp(tk.Tk):
         card = _card(parent)
         _card_title(card, "3", "Destination", "Choisissez le dossier parent. L'application créera le sous-dossier horodaté.").grid(row=0, column=0, columnspan=3, sticky="ew")
         card.columnconfigure(0, weight=1)
-        ttk.Entry(card, textvariable=self.output_dir).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        ttk.Entry(card, textvariable=self.output_dir).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         self.output_button = ttk.Button(card, text=Text.choose, command=self._choose_output_dir, style="Action.TButton")
-        self.output_button.grid(row=1, column=2, sticky="e", padx=(10, 0), pady=(8, 0))
+        self.output_button.grid(row=1, column=2, sticky="e", padx=(10, 0), pady=(6, 0))
         self.output_meta = ttk.Label(card, text="", style="SmallMuted.TLabel", wraplength=430, justify="left")
-        self.output_meta.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(5, 0))
+        self.output_meta.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(4, 0))
         self.output_files = ttk.Label(card, text="", style="SmallMuted.TLabel", wraplength=430, justify="left")
-        self.output_files.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(4, 0))
+        self.output_files.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(2, 0))
         options = ttk.Frame(card, style="CardBody.TFrame")
-        options.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        options.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(4, 0))
         options.columnconfigure(0, weight=1)
         options.columnconfigure(1, weight=1)
         self.report_option = CheckOption(
@@ -555,7 +555,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         journal_panel.rowconfigure(1, weight=1)
         journal_panel.columnconfigure(0, weight=1)
         _panel_title(journal_panel, "Journal").grid(row=0, column=0, sticky="w", pady=(0, 5))
-        self.log_text = _dashboard_text(journal_panel, height=18, font_size=9)
+        self.log_text = _dashboard_text(journal_panel, height=14, font_size=9)
         self.log_text.grid(row=1, column=0, sticky="nsew")
         return card
 
@@ -567,8 +567,8 @@ class EmployeurDMegaGestApp(tk.Tk):
             highlightcolor=Palette.border,
             highlightthickness=1,
             bd=0,
-            padx=14,
-            pady=11,
+            padx=12,
+            pady=8,
         )
         bar.columnconfigure(1, weight=1)
         primary = ttk.Frame(bar, style="CardBody.TFrame")
@@ -927,46 +927,50 @@ class EmployeurDMegaGestApp(tk.Tk):
 
     def _refresh_status_badge(self) -> None:
         if self.busy:
-            label, status, icon = "En cours", "warning", "warning"
+            label, status, icon = "Paie en cours", "warning", "warning"
         elif self.last_error:
-            label, status, icon = "À corriger", "error", "error"
+            label, status, icon = "Paie à corriger", "error", "error"
         elif self.last_result and self.last_result.conversion and self.last_result.conversion.output_path:
             label, status, icon = "MND créé", "success", "check"
         elif self.last_result:
-            label, status, icon = "Validé", "success", "check"
+            label, status, icon = "Paie validée", "success", "check"
         elif self.source_path.get().strip():
-            label, status, icon = "À valider", "warning", "warning"
+            label, status, icon = "Paie à vérifier", "warning", "warning"
         else:
-            label, status, icon = "Prêt", "success", "check"
+            label, status, icon = "Paie à préparer", "info", "dot"
         bg, fg = status_colors(status)
         self.status_badge.configure(text=label, icon=icon, background=bg, foreground=fg)
         success_bg, success_fg = status_colors("success")
-        self.security_badge.configure(text="Sécurité", icon="shield", background=success_bg, foreground=success_fg)
+        self.security_badge.configure(text="Sécurité OK", icon="shield", background=success_bg, foreground=success_fg)
         self._refresh_update_badge()
 
     def _refresh_update_badge(self) -> None:
         if not hasattr(self, "update_badge"):
             return
         if self.last_update_result and self.last_update_result.update_available:
-            label, status, icon = "Mise à jour", "warning", "warning"
+            label, status, icon = "Mise à jour disponible", "warning", "warning"
         elif self.last_update_result and self.last_update_result.ok:
-            label, status, icon = "À jour", "success", "check"
+            label, status, icon = "Version à jour", "success", "check"
         elif self.last_update_result and not self.last_update_result.ok:
-            label, status, icon = "Version ?", "warning", "warning"
+            label, status, icon = "Version non vérifiée", "warning", "warning"
         else:
-            label, status, icon = "Version ?", "warning", "warning"
+            label, status, icon = "Version à vérifier", "warning", "warning"
         bg, fg = status_colors(status)
         self.update_badge.configure(text=label, icon=icon, background=bg, foreground=fg)
 
     def _set_initial_geometry(self) -> None:
         screen_width = max(1, self.winfo_screenwidth())
         screen_height = max(1, self.winfo_screenheight())
-        width = max(1180, min(1360, int(screen_width * 0.9)))
-        height = max(760, min(940, int(screen_height * 0.9)))
+        horizontal_margin = 48 if screen_width >= 1280 else 24
+        vertical_margin = 92 if screen_height >= 900 else 72
+        width = min(1360, max(1040, screen_width - horizontal_margin))
+        height = min(900, max(660, screen_height - vertical_margin))
+        width = min(width, screen_width)
+        height = min(height, screen_height)
         x = max(0, int((screen_width - width) / 2))
         y = max(0, int((screen_height - height) / 2))
         self.geometry(f"{width}x{height}+{x}+{y}")
-        self.minsize(1080, 720)
+        self.minsize(min(1040, width), min(660, height))
 
     def _can_validate(self) -> bool:
         if self.busy:
@@ -1046,7 +1050,7 @@ def _card(parent: ttk.Frame) -> tk.Frame:
         highlightthickness=1,
         bd=0,
         padx=14,
-        pady=12,
+        pady=9,
     )
     frame.grid_columnconfigure(0, weight=1)
     return frame
@@ -1080,7 +1084,7 @@ def _subpanel(parent: tk.Widget) -> tk.Frame:
         highlightthickness=1,
         bd=0,
         padx=12,
-        pady=9,
+        pady=8,
     )
     panel.columnconfigure(1, weight=1)
     return panel
@@ -1106,8 +1110,8 @@ def _dashboard_text(parent: tk.Widget, *, height: int, font_size: int = 10) -> t
         highlightbackground=Palette.border,
         highlightcolor=Palette.border,
         highlightthickness=1,
-        padx=14,
-        pady=12,
+        padx=12,
+        pady=9,
         font=("Segoe UI", font_size),
         background=Palette.surface_alt,
         foreground=Palette.text,
@@ -1188,7 +1192,18 @@ def _capitalize(value: str) -> str:
 def _output_files_text(files: tuple[str, ...]) -> str:
     if not files:
         return "Fichiers à créer : selon les options choisies."
-    return "Fichiers à créer :\n" + "\n".join(f"- {name}" for name in files)
+    labels = []
+    for name in files:
+        suffix = Path(name).suffix.lower()
+        if suffix == ".mnd":
+            labels.append("MND")
+        elif suffix == ".md":
+            labels.append("rapport Markdown")
+        elif suffix == ".json":
+            labels.append("validation JSON")
+        else:
+            labels.append(name)
+    return f"Fichiers à créer : {_join_french(tuple(labels))}."
 
 
 def _timestamped(message: str) -> str:
