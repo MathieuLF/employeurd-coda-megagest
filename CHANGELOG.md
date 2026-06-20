@@ -4,6 +4,8 @@ Toutes les versions officielles publiées sur GitHub doivent reprendre la sectio
 
 ## [Non publié]
 
+- Retrait du rapport sécurité Markdown distinct des fichiers joints aux mises en ligne; les informations utiles restent dans les notes, le manifeste JSON et le rapport VirusTotal.
+
 ## [0.1.0] - 2026-06-20
 
 - Conversion EmployeurD TXT vers MND MégaGest avec validation stricte.

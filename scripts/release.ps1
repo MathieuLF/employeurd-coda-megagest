@@ -44,23 +44,6 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $PortableExe = "dist/EmployeurD-MegaGest/EmployeurD-MegaGest.exe"
-$PortableExeHash = (Get-FileHash -Algorithm SHA256 $PortableExe).Hash
-$Signature = Get-AuthenticodeSignature -LiteralPath $PortableExe
-
-$Security = "dist/EmployeurD-MegaGest-v$Version.security.md"
-@"
-# Rapport sécurité EmployeurD-MegaGest v$Version
-
-- Données de paie: non incluses dans la mise en ligne.
-- Packager: cx_Freeze, paquet portable.
-- SHA256 exécutable: $PortableExeHash.
-- SHA256 paquet applicatif: $PackageHash.
-- Signature Windows: $($Signature.Status).
-- Conversion: locale.
-- Mise à jour: vérification explicite, sans envoi de fichiers.
-- VirusTotal: rapport joint séparément pour l'exécutable public seulement.
-- Mentions légales: voir docs/mentions_legales.md.
-"@ | Set-Content -Encoding utf8 $Security
 
 $VirusTotal = "dist/EmployeurD-MegaGest-v$Version.virustotal.md"
 @"

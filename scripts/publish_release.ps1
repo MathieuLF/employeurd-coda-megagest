@@ -144,7 +144,6 @@ if ($CreateGitHubRelease) {
         "$PortableZip.sha256",
         "dist/$Name-v$ReleaseVersion-portable.exe.sha256",
         "dist/$Name-v$ReleaseVersion.sbom.json",
-        "dist/$Name-v$ReleaseVersion.security.md",
         "dist/$Name-v$ReleaseVersion.virustotal.md",
         "dist/$Name-v$ReleaseVersion.release-manifest.json"
     )
