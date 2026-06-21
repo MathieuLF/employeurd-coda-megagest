@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .update_check import (
+    DEFAULT_TIMEOUT_SECONDS,
+    NETWORK_ERRORS,
     _fetch_json,
     _fetch_text,
     extract_sha256,
@@ -15,6 +17,9 @@ from .update_check import (
     release_url_for_version,
 )
 from .version import __version__
+
+
+SIGNATURE_TIMEOUT_SECONDS = 2
 
 
 @dataclass(frozen=True)
@@ -59,7 +64,7 @@ def check_running_app_integrity(
     current_version: str = __version__,
     executable_path: Path | None = None,
     frozen: bool | None = None,
-    timeout: float = 5.0,
+    timeout: float = DEFAULT_TIMEOUT_SECONDS,
 ) -> IntegrityCheckResult:
     local = local_integrity_details(executable_path=executable_path, current_version=current_version)
     is_frozen = bool(getattr(sys, "frozen", False) if frozen is None else frozen)
@@ -76,7 +81,9 @@ def check_running_app_integrity(
     try:
         payload = _fetch_json(release_url, timeout=timeout)
     except urllib.error.HTTPError as error:
-        if error.code == 404:
+        status_code = error.code
+        error.close()
+        if status_code == 404:
             return _with_status(
                 local,
                 "unavailable",
@@ -86,10 +93,10 @@ def check_running_app_integrity(
         return _with_status(
             local,
             "unavailable",
-            f"Vérification officielle impossible pour le moment : HTTP {error.code}.",
+            f"Vérification officielle impossible pour le moment : HTTP {status_code}.",
             release_url=release_url,
         )
-    except (OSError, urllib.error.URLError, TimeoutError) as error:
+    except NETWORK_ERRORS as error:
         return _with_status(
             local,
             "unavailable",
@@ -104,7 +111,7 @@ def check_running_app_integrity(
         if sha256_url:
             try:
                 expected = extract_sha256(_fetch_text(sha256_url, timeout=timeout))
-            except (OSError, urllib.error.URLError, TimeoutError):
+            except NETWORK_ERRORS:
                 expected = None
     if not expected:
         expected_kind = "exe"
@@ -112,7 +119,7 @@ def check_running_app_integrity(
         if sha256_url:
             try:
                 expected = extract_sha256(_fetch_text(sha256_url, timeout=timeout))
-            except (OSError, urllib.error.URLError, TimeoutError):
+            except NETWORK_ERRORS:
                 expected = None
     if not expected:
         return _with_status(
@@ -196,7 +203,7 @@ def signature_status(path: Path) -> str:
             ],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=SIGNATURE_TIMEOUT_SECONDS,
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired):

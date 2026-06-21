@@ -34,10 +34,18 @@ def preferences_path() -> Path:
     return preferences_dir() / PREFERENCES_FILENAME
 
 
-def load_preferences(path: Path | None = None) -> AppPreferences:
+def ensure_preferences_dir(path: Path | None = None) -> Path:
+    target = path or preferences_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    return target.parent
+
+
+def load_preferences(path: Path | None = None, *, default_update_check_on_startup: bool = False) -> AppPreferences:
     target = path or preferences_path()
     try:
         data = json.loads(target.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return AppPreferences(update_check_on_startup=default_update_check_on_startup)
     except (OSError, json.JSONDecodeError):
         return AppPreferences()
     if not isinstance(data, dict):
