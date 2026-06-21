@@ -10,6 +10,7 @@ import urllib.error
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -34,6 +35,7 @@ from employeurd_megagest.parser_employeurd import parse_employeurd_file, parse_e
 from employeurd_megagest.parser_mnd import parse_mnd_file, parse_mnd_text
 from employeurd_megagest.preferences import (
     AppPreferences,
+    ensure_preferences_dir,
     load_preferences,
     remember_output_dir,
     remember_update_check_on_startup,
@@ -42,7 +44,7 @@ from employeurd_megagest.preferences import (
 from employeurd_megagest.reconciliation import reconcile_control_report, reconcile_spd640, reconciliation_failed
 from employeurd_megagest.reports.spd640_parser import parse_spd640_csv, reconcile_spd640_with_source_totals
 from employeurd_megagest.resource_paths import package_asset_path
-from employeurd_megagest.update_check import DEFAULT_UPDATE_URL, check_for_update
+from employeurd_megagest.update_check import DEFAULT_TIMEOUT_SECONDS, DEFAULT_UPDATE_URL, GITHUB_RELEASE_PAGE_BYTES, check_for_update
 from employeurd_megagest.validator import convert_account, mnd_totals, source_totals
 from employeurd_megagest.writer_mnd import MND_LINE_LENGTH
 from scripts import append_release_verification, generate_release_manifest, submit_virustotal
@@ -522,14 +524,14 @@ class EmployeurDMegaGestTest(unittest.TestCase):
             }
             fetch_text.return_value = f"{expected_hash.upper()}  EmployeurD-MegaGest-v0.1.1-portable.zip"
 
-            result = check_for_update(DEFAULT_UPDATE_URL, current_version="0.1.0")
+            result = check_for_update("https://updates.example.invalid/latest.json", current_version="0.1.0")
 
         self.assertTrue(result.ok)
         self.assertEqual(result.download_url, "https://example.invalid/app-portable.zip")
         self.assertEqual(result.sha256, expected_hash)
 
     def test_update_check_uses_default_url_when_config_is_blank_or_placeholder(self) -> None:
-        with patch("employeurd_megagest.update_check._fetch_json") as fetch:
+        with patch("employeurd_megagest.update_check._fetch_github_release_page_payload") as fetch:
             fetch.return_value = {"tag_name": "v0.1.0", "html_url": "https://example.invalid/release"}
 
             blank = check_for_update("", current_version="0.1.0")
@@ -544,12 +546,112 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertEqual(fetch.call_args_list[1].args[0], DEFAULT_UPDATE_URL)
 
     def test_update_check_reports_missing_public_release_cleanly(self) -> None:
-        error = urllib.error.HTTPError(DEFAULT_UPDATE_URL, 404, "Not Found", {}, None)
+        url = "https://updates.example.invalid/latest.json"
+        error = urllib.error.HTTPError(url, 404, "Not Found", {}, None)
         with patch("employeurd_megagest.update_check._fetch_json", side_effect=error):
-            result = check_for_update(DEFAULT_UPDATE_URL, current_version="0.1.0")
+            result = check_for_update(url, current_version="0.1.0")
 
         self.assertFalse(result.ok)
         self.assertIn("Aucune mise en ligne officielle", result.message)
+
+    def test_update_check_reports_timeout_cleanly(self) -> None:
+        url = "https://updates.example.invalid/latest.json"
+        with patch("employeurd_megagest.update_check._fetch_json", side_effect=TimeoutError("The read operation timed out")):
+            result = check_for_update(url, current_version="0.1.0")
+
+        self.assertFalse(result.ok)
+        self.assertIn("délai d'attente dépassé", result.message)
+        self.assertNotIn("The read operation timed out", result.message)
+
+    def test_update_check_reports_temporary_github_error_cleanly(self) -> None:
+        url = "https://updates.example.invalid/latest.json"
+        error = urllib.error.HTTPError(url, 504, "Gateway Timeout", {}, None)
+        with patch("employeurd_megagest.update_check._fetch_json", side_effect=error):
+            result = check_for_update(url, current_version="0.1.0")
+
+        self.assertFalse(result.ok)
+        self.assertIn("GitHub", result.message)
+        self.assertIn("HTTP 504", result.message)
+
+    def test_update_check_reports_invalid_custom_url_without_crashing(self) -> None:
+        with patch("employeurd_megagest.update_check._fetch_json", side_effect=ValueError("unknown url type")):
+            result = check_for_update("not a url", current_version="0.1.0")
+
+        self.assertFalse(result.ok)
+        self.assertIn("Vérification impossible", result.message)
+
+    def test_update_check_uses_fast_github_release_page_before_api(self) -> None:
+        expected_hash = "c" * 64
+        with (
+            patch("employeurd_megagest.update_check._fetch_json") as fetch_json,
+            patch("employeurd_megagest.update_check._fetch_text_response") as fetch_page,
+            patch("employeurd_megagest.update_check._fetch_text", return_value=f"{expected_hash}  app.zip"),
+        ):
+            fetch_page.return_value = SimpleNamespace(
+                text="",
+                final_url="https://github.com/MathieuLF/employeurd-coda-megagest/releases/tag/v0.1.0",
+            )
+
+            result = check_for_update(DEFAULT_UPDATE_URL, current_version="0.1.0")
+
+        self.assertTrue(result.ok)
+        fetch_json.assert_not_called()
+        self.assertEqual(result.latest_version, "0.1.0")
+        self.assertEqual(result.sha256, expected_hash)
+        self.assertEqual(fetch_page.call_args.kwargs["timeout"], DEFAULT_TIMEOUT_SECONDS)
+        self.assertEqual(fetch_page.call_args.kwargs["max_bytes"], GITHUB_RELEASE_PAGE_BYTES)
+        self.assertEqual(
+            result.download_url,
+            "https://github.com/MathieuLF/employeurd-coda-megagest/releases/download/v0.1.0/EmployeurD-MegaGest-v0.1.0-portable.zip",
+        )
+
+    def test_github_update_check_fails_fast_without_api_retry(self) -> None:
+        with (
+            patch("employeurd_megagest.update_check._fetch_text_response", side_effect=TimeoutError("slow")),
+            patch("employeurd_megagest.update_check._fetch_json") as fetch_json,
+        ):
+            result = check_for_update(DEFAULT_UPDATE_URL, current_version="0.1.0")
+
+        self.assertFalse(result.ok)
+        self.assertIn("pas assez rapidement", result.message)
+        fetch_json.assert_not_called()
+
+    def test_update_check_sha256_timeout_keeps_release_result(self) -> None:
+        with (
+            patch("employeurd_megagest.update_check._fetch_json") as fetch_json,
+            patch("employeurd_megagest.update_check._fetch_text", side_effect=TimeoutError("timed out")) as fetch_text,
+        ):
+            fetch_json.return_value = {
+                "tag_name": "v0.1.0",
+                "html_url": "https://example.invalid/releases/v0.1.0",
+                "assets": [
+                    {
+                        "name": "EmployeurD-MegaGest-v0.1.0-portable.zip",
+                        "browser_download_url": "https://example.invalid/app.zip",
+                    },
+                    {
+                        "name": "EmployeurD-MegaGest-v0.1.0-portable.zip.sha256",
+                        "browser_download_url": "https://example.invalid/app.zip.sha256",
+                    },
+                    {
+                        "name": "EmployeurD-MegaGest-v0.1.0-portable.exe.sha256",
+                        "browser_download_url": "https://example.invalid/app.exe.sha256",
+                    },
+                ],
+            }
+
+            result = check_for_update(
+                "https://updates.example.invalid/latest.json",
+                current_version="0.1.0",
+                timeout=4.0,
+                sha256_timeout=0.25,
+            )
+
+        self.assertTrue(result.ok)
+        self.assertIsNone(result.sha256)
+        self.assertEqual(fetch_text.call_count, 1)
+        self.assertEqual(fetch_text.call_args.args[0], "https://example.invalid/app.zip.sha256")
+        self.assertEqual(fetch_text.call_args.kwargs["timeout"], 0.25)
 
     def test_integrity_check_compares_running_package_to_release_hash(self) -> None:
         expected_hash = "b" * 64
@@ -584,6 +686,7 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertTrue(result.verified)
         self.assertEqual(result.expected_sha256, expected_hash)
         self.assertTrue(result.release_url.endswith("/releases/tags/v0.1.0"))
+        self.assertEqual(fetch_json.call_args.kwargs["timeout"], DEFAULT_TIMEOUT_SECONDS)
 
     def test_package_integrity_hash_changes_when_package_changes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -613,6 +716,17 @@ class EmployeurDMegaGestTest(unittest.TestCase):
             self.assertTrue(load_preferences(path).update_check_on_startup)
             remember_update_check_on_startup(False, path=path)
             self.assertFalse(load_preferences(path).update_check_on_startup)
+
+    def test_preferences_first_launch_can_use_config_default_and_create_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "missing" / "preferences.json"
+
+            preferences = load_preferences(path, default_update_check_on_startup=True)
+
+            self.assertTrue(preferences.update_check_on_startup)
+            self.assertFalse(path.parent.exists())
+            self.assertEqual(ensure_preferences_dir(path), path.parent)
+            self.assertTrue(path.parent.exists())
 
     def test_gui_state_previews_files_and_output(self) -> None:
         root = Path(__file__).resolve().parents[1]

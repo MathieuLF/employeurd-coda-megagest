@@ -3,6 +3,7 @@ from __future__ import annotations
 import queue
 import tempfile
 import threading
+import time
 import tkinter as tk
 import tkinter.font as tkfont
 import webbrowser
@@ -34,14 +35,16 @@ from .gui_texts import (
 from .gui_theme import Palette, configure_theme, status_colors
 from .models import ConversionResult, ReconciliationResult
 from .platform_actions import open_folder
-from .preferences import load_preferences, remember_output_dir, remember_update_check_on_startup
+from .preferences import ensure_preferences_dir, load_preferences, remember_output_dir, remember_update_check_on_startup
 from .resource_paths import default_config_dir, package_asset_path
-from .update_check import UpdateCheckResult, check_for_update
+from .update_check import DEFAULT_TIMEOUT_SECONDS, UpdateCheckResult, check_for_update, configured_update_url
 from .user_messages import friendly_error_message, technical_error_message
 from .version import __version__
 
 
 _STATUS_ICON_CACHE: dict[str, tk.PhotoImage] | None = None
+UPDATE_CHECK_TIMEOUT_SECONDS = DEFAULT_TIMEOUT_SECONDS
+UPDATE_CHECK_UI_DEADLINE_SECONDS = 2.5
 
 
 def _status_icon_images() -> dict[str, tk.PhotoImage]:
@@ -355,8 +358,15 @@ class EmployeurDMegaGestApp(tk.Tk):
         self._set_initial_geometry()
         self._set_product_icon()
 
+        config = load_app_config(default_config_dir())
         self.controller = GuiController(config_dir=default_config_dir())
-        self.preferences = load_preferences()
+        self.preferences = load_preferences(
+            default_update_check_on_startup=_config_update_check_on_startup(config)
+        )
+        try:
+            ensure_preferences_dir()
+        except OSError:
+            pass
         self.source_path = tk.StringVar()
         self.spd640_path = tk.StringVar()
         self.output_dir = tk.StringVar(value=_usable_saved_output_dir(self.preferences.output_dir))
@@ -369,6 +379,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         self.last_result: GuiOperationResult | None = None
         self.last_error: Exception | None = None
         self.last_update_result: UpdateCheckResult | None = None
+        self.update_check_running = False
         self.busy = False
         self.activity_log: list[str] = [_timestamped("Ouverture de l'application. Ajoutez l'écriture EmployeurD pour commencer.")]
         self.journal_summaries: list[tuple[str, str]] = []
@@ -820,27 +831,40 @@ class EmployeurDMegaGestApp(tk.Tk):
         show_support_window(self)
 
     def _check_update(self) -> None:
-        if self.busy:
+        if self.busy or self.update_check_running:
             return
         config = load_app_config(default_config_dir())
         update_url = str(config.updates.get("url", ""))
+        resolved_url = configured_update_url(update_url)
+        deadline = time.monotonic() + UPDATE_CHECK_UI_DEADLINE_SECONDS
+        self.update_check_running = True
         self._log_event("Vérification de la version en cours.")
-        self.update_button.configure(text=Text.check_updates)
+        self.update_button.configure(text="Vérification...")
         self.update_button.state(["disabled"])
         self._refresh_update_badge()
         result_queue: queue.Queue[UpdateCheckResult] = queue.Queue()
 
         def worker() -> None:
-            result_queue.put(check_for_update(update_url))
+            try:
+                result_queue.put(check_for_update(update_url, timeout=UPDATE_CHECK_TIMEOUT_SECONDS))
+            except Exception as error:
+                result_queue.put(_unexpected_update_check_failure(resolved_url, error))
 
         def poll() -> None:
             try:
                 result = result_queue.get_nowait()
             except queue.Empty:
+                if time.monotonic() >= deadline:
+                    if self.winfo_exists():
+                        self.update_check_running = False
+                        self.update_button.state(["!disabled"])
+                        self._update_check_finished(_update_check_deadline_failure(resolved_url))
+                    return
                 if self.winfo_exists():
                     self.after(100, poll)
                 return
             if self.winfo_exists():
+                self.update_check_running = False
                 self.update_button.state(["!disabled"])
                 self._update_check_finished(result)
 
@@ -969,12 +993,14 @@ class EmployeurDMegaGestApp(tk.Tk):
     def _refresh_update_badge(self) -> None:
         if not hasattr(self, "update_badge"):
             return
-        if self.last_update_result and self.last_update_result.update_available:
+        if self.update_check_running:
+            label, status, icon = "Vérification en cours", "info", "dot"
+        elif self.last_update_result and self.last_update_result.update_available:
             label, status, icon = "Mise à jour disponible", "warning", "warning"
         elif self.last_update_result and self.last_update_result.ok:
             label, status, icon = "Version à jour", "success", "check"
         elif self.last_update_result and not self.last_update_result.ok:
-            label, status, icon = "Version non vérifiée", "warning", "warning"
+            label, status, icon = "Vérification reportée", "warning", "warning"
         else:
             label, status, icon = "Version à vérifier", "warning", "warning"
         bg, fg = status_colors(status)
@@ -1076,6 +1102,37 @@ class EmployeurDMegaGestApp(tk.Tk):
 def _optional_path(value: str) -> Path | None:
     cleaned = value.strip()
     return Path(cleaned) if cleaned else None
+
+
+def _config_update_check_on_startup(config) -> bool:
+    value = config.updates.get("check_on_startup", False)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return bool(value)
+
+
+def _unexpected_update_check_failure(url: str, error: Exception) -> UpdateCheckResult:
+    return UpdateCheckResult(
+        ok=False,
+        update_available=False,
+        current_version=__version__,
+        latest_version=None,
+        url=url,
+        message=f"Vérification impossible pour le moment: erreur interne ({error.__class__.__name__}).",
+    )
+
+
+def _update_check_deadline_failure(url: str) -> UpdateCheckResult:
+    return UpdateCheckResult(
+        ok=False,
+        update_available=False,
+        current_version=__version__,
+        latest_version=None,
+        url=url,
+        message="Vérification reportée: le réseau répond trop lentement.",
+    )
 
 
 def _usable_saved_output_dir(value: str) -> str:

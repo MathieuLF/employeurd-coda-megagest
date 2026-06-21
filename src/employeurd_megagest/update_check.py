@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import http.client
 import re
 import urllib.error
 import urllib.request
@@ -12,6 +13,14 @@ from .version import APP_NAME, __version__
 
 DEFAULT_UPDATE_URL = "https://api.github.com/repos/MathieuLF/employeurd-coda-megagest/releases/latest"
 SHA256_RE = re.compile(r"\b[a-fA-F0-9]{64}\b")
+GITHUB_API_RELEASE_RE = re.compile(r"^https://api\.github\.com/repos/([^/]+)/([^/]+)/releases(?:/latest|/tags/[^/?#]+)?")
+GITHUB_WEB_RELEASE_RE = re.compile(r"^https://github\.com/([^/]+)/([^/]+)/releases")
+GITHUB_RELEASE_TAG_RE = re.compile(r"/releases/tag/v?([0-9][0-9A-Za-z.\-_]*)")
+DEFAULT_TIMEOUT_SECONDS = 1.25
+DEFAULT_SHA256_TIMEOUT_SECONDS = 0.6
+GITHUB_RELEASE_PAGE_BYTES = 0
+TEMPORARY_HTTP_ERRORS = {502, 503, 504}
+NETWORK_ERRORS = (OSError, urllib.error.URLError, TimeoutError, http.client.HTTPException, ValueError)
 
 
 @dataclass(frozen=True)
@@ -28,38 +37,63 @@ class UpdateCheckResult:
     message: str = ""
 
 
-def check_for_update(url: str, *, current_version: str = __version__, timeout: float = 5.0) -> UpdateCheckResult:
-    resolved_url = configured_update_url(url)
-    try:
-        payload = _fetch_json(resolved_url, timeout=timeout)
-    except urllib.error.HTTPError as error:
-        if error.code == 404:
-            return UpdateCheckResult(
-                False,
-                False,
-                current_version,
-                None,
-                resolved_url,
-                message="Aucune mise en ligne officielle n'est publiée pour le moment.",
-            )
-        return UpdateCheckResult(
-            False,
-            False,
-            current_version,
-            None,
-            resolved_url,
-            message=f"Vérification impossible pour le moment: HTTP {error.code}.",
-        )
-    except (OSError, urllib.error.URLError, json.JSONDecodeError) as error:
-        return UpdateCheckResult(
-            False,
-            False,
-            current_version,
-            None,
-            resolved_url,
-            message=f"Vérification impossible pour le moment: {error}",
-        )
+@dataclass(frozen=True)
+class _TextFetchResult:
+    text: str
+    final_url: str
 
+
+def check_for_update(
+    url: str,
+    *,
+    current_version: str = __version__,
+    timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    sha256_timeout: float = DEFAULT_SHA256_TIMEOUT_SECONDS,
+) -> UpdateCheckResult:
+    resolved_url = configured_update_url(url)
+    github_payload = _fetch_github_release_page_payload(resolved_url, timeout=timeout)
+    if github_payload:
+        payload = github_payload
+    elif _github_repo_from_url(resolved_url):
+        return _failed_update_result(
+            resolved_url,
+            current_version,
+            "Vérification impossible pour le moment: GitHub ne répond pas assez rapidement.",
+        )
+    else:
+        payload_result = _fetch_json_payload_or_failure(resolved_url, current_version, timeout=timeout)
+        if isinstance(payload_result, UpdateCheckResult):
+            return payload_result
+        payload = payload_result
+
+    return _build_update_result(
+        payload,
+        resolved_url,
+        current_version=current_version,
+        sha256_timeout=sha256_timeout,
+    )
+
+
+def _fetch_json_payload_or_failure(url: str, current_version: str, *, timeout: float) -> dict[str, Any] | UpdateCheckResult:
+    try:
+        return _fetch_json(url, timeout=timeout)
+    except urllib.error.HTTPError as error:
+        message = _http_error_message(error)
+        error.close()
+        return _failed_update_result(url, current_version, message)
+    except NETWORK_ERRORS as error:
+        return _failed_update_result(url, current_version, _network_error_message(error))
+    except json.JSONDecodeError as error:
+        return _failed_update_result(url, current_version, _network_error_message(error))
+
+
+def _build_update_result(
+    payload: dict[str, Any],
+    resolved_url: str,
+    *,
+    current_version: str,
+    sha256_timeout: float,
+) -> UpdateCheckResult:
     latest = str(payload.get("latest_version") or payload.get("tag_name") or "").lstrip("v")
     if not latest:
         return UpdateCheckResult(
@@ -79,7 +113,7 @@ def check_for_update(url: str, *, current_version: str = __version__, timeout: f
     update_available = _version_tuple(latest) > _version_tuple(current_version)
     sha256 = extract_sha256(payload.get("sha256"))
     if not sha256:
-        sha256 = _release_download_sha256(payload, download_url, version=latest, timeout=timeout)
+        sha256 = _release_download_sha256(payload, download_url, version=latest, timeout=sha256_timeout)
     return UpdateCheckResult(
         ok=True,
         update_available=update_available,
@@ -92,6 +126,84 @@ def check_for_update(url: str, *, current_version: str = __version__, timeout: f
         release_notes=payload.get("release_notes") or payload.get("body"),
         message="Nouvelle version disponible." if update_available else "Application à jour.",
     )
+
+
+def _failed_update_result(url: str, current_version: str, message: str) -> UpdateCheckResult:
+    return UpdateCheckResult(False, False, current_version, None, url, message=message)
+
+
+def _fetch_github_release_page_payload(url: str, *, timeout: float) -> dict[str, Any] | None:
+    repo = _github_repo_from_url(url)
+    if not repo:
+        return None
+    owner, name = repo
+    latest_url = f"https://github.com/{owner}/{name}/releases/latest"
+    try:
+        response = _fetch_text_response(latest_url, timeout=timeout, max_bytes=GITHUB_RELEASE_PAGE_BYTES)
+    except NETWORK_ERRORS:
+        return None
+    match = GITHUB_RELEASE_TAG_RE.search(response.final_url) or GITHUB_RELEASE_TAG_RE.search(response.text)
+    if not match:
+        return None
+    version = match.group(1).strip().lstrip("v")
+    if not version:
+        return None
+    release_url = f"https://github.com/{owner}/{name}/releases/tag/v{version}"
+    download_root = f"https://github.com/{owner}/{name}/releases/download/v{version}"
+    package_name = f"{APP_NAME}-v{version}-portable.zip"
+    return {
+        "tag_name": f"v{version}",
+        "html_url": release_url,
+        "assets": [
+            {
+                "name": package_name,
+                "browser_download_url": f"{download_root}/{package_name}",
+            },
+            {
+                "name": f"{package_name}.sha256",
+                "browser_download_url": f"{download_root}/{package_name}.sha256",
+            },
+            {
+                "name": f"{APP_NAME}-v{version}-portable.exe.sha256",
+                "browser_download_url": f"{download_root}/{APP_NAME}-v{version}-portable.exe.sha256",
+            },
+        ],
+    }
+
+
+def _github_repo_from_url(url: str) -> tuple[str, str] | None:
+    match = GITHUB_API_RELEASE_RE.match(url) or GITHUB_WEB_RELEASE_RE.match(url)
+    if not match:
+        return None
+    return match.group(1), match.group(2)
+
+
+def _http_error_message(error: urllib.error.HTTPError) -> str:
+    if error.code == 404:
+        return "Aucune mise en ligne officielle n'est publiée pour le moment."
+    if error.code in TEMPORARY_HTTP_ERRORS:
+        return f"Vérification impossible pour le moment: GitHub ne répond pas correctement (HTTP {error.code})."
+    return f"Vérification impossible pour le moment: HTTP {error.code}."
+
+
+def _network_error_message(error: BaseException) -> str:
+    if isinstance(error, json.JSONDecodeError):
+        return "La réponse de mise à jour est illisible pour le moment."
+    if _is_timeout_error(error):
+        return "Vérification impossible pour le moment: délai d'attente dépassé."
+    if isinstance(error, urllib.error.URLError) and error.reason:
+        reason = error.reason
+        if isinstance(reason, BaseException) and _is_timeout_error(reason):
+            return "Vérification impossible pour le moment: délai d'attente dépassé."
+        return f"Vérification impossible pour le moment: {reason}."
+    return f"Vérification impossible pour le moment: {error}."
+
+
+def _is_timeout_error(error: BaseException | object) -> bool:
+    if isinstance(error, TimeoutError):
+        return True
+    text = str(error).lower()
+    return "timed out" in text or "timeout" in text or "délai d'attente" in text
 
 
 def configured_update_url(url: str) -> str:
@@ -158,9 +270,10 @@ def _release_download_sha256(
     lowered_download = str(download_url or "").lower()
     if lowered_download.endswith(".zip"):
         suffixes.append(".zip.sha256")
-    if lowered_download.endswith(".exe"):
+    elif lowered_download.endswith(".exe"):
         suffixes.append(".exe.sha256")
-    suffixes.extend([".zip.sha256", ".exe.sha256"])
+    else:
+        suffixes.extend([".zip.sha256", ".exe.sha256"])
 
     seen: set[str] = set()
     for suffix in suffixes:
@@ -172,7 +285,7 @@ def _release_download_sha256(
             continue
         try:
             found = extract_sha256(_fetch_text(sha256_url, timeout=timeout))
-        except (OSError, urllib.error.URLError, TimeoutError):
+        except NETWORK_ERRORS:
             found = None
         if found:
             return found
@@ -190,10 +303,15 @@ def _fetch_json(url: str, *, timeout: float) -> dict[str, Any]:
 
 
 def _fetch_text(url: str, *, timeout: float) -> str:
+    return _fetch_text_response(url, timeout=timeout).text
+
+
+def _fetch_text_response(url: str, *, timeout: float, max_bytes: int | None = None) -> _TextFetchResult:
     request = urllib.request.Request(url, headers={"User-Agent": f"{APP_NAME}/{__version__}"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
-        data = response.read()
-    return data.decode("utf-8", errors="replace")
+        data = response.read(max_bytes) if max_bytes is not None else response.read()
+        final_url = response.geturl()
+    return _TextFetchResult(data.decode("utf-8", errors="replace"), final_url)
 
 
 def _version_tuple(value: str) -> tuple[int, ...]:
