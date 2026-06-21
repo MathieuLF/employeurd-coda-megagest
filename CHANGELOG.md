@@ -4,7 +4,12 @@ Toutes les versions officielles publiées sur GitHub doivent reprendre la sectio
 
 ## [Non publié]
 
+## [0.1.1] - 2026-06-21
+
 - Retrait du rapport sécurité Markdown distinct des fichiers joints aux mises en ligne; les informations utiles restent dans les notes, le manifeste JSON et le rapport VirusTotal.
+- Vérification de version plus rapide et robuste au premier lancement, même sans dossier local de préférences.
+- Fallback léger vers GitHub Releases quand l'API répond lentement ou en 504, avec timeouts courts et messages hors ligne clairs.
+- Garde-fous GUI contre les vérifications concurrentes et les réseaux qui répondent trop lentement.
 
 ## [0.1.0] - 2026-06-20
 

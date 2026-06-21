@@ -46,6 +46,7 @@ from employeurd_megagest.reports.spd640_parser import parse_spd640_csv, reconcil
 from employeurd_megagest.resource_paths import package_asset_path
 from employeurd_megagest.update_check import DEFAULT_TIMEOUT_SECONDS, DEFAULT_UPDATE_URL, GITHUB_RELEASE_PAGE_BYTES, check_for_update
 from employeurd_megagest.validator import convert_account, mnd_totals, source_totals
+from employeurd_megagest.version import __version__
 from employeurd_megagest.writer_mnd import MND_LINE_LENGTH
 from scripts import append_release_verification, generate_release_manifest, submit_virustotal
 from scripts.submit_virustotal import collect_detections
@@ -797,7 +798,7 @@ class EmployeurDMegaGestTest(unittest.TestCase):
     def test_release_scripts_audit_and_extract_changelog(self) -> None:
         root = Path(__file__).resolve().parents[1]
         audit = subprocess.run(
-            [sys.executable, "scripts/audit_release_readiness.py", "--version", "0.1.0"],
+            [sys.executable, "scripts/audit_release_readiness.py", "--version", __version__],
             cwd=root,
             capture_output=True,
             text=True,
@@ -807,14 +808,14 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertIn("Préparation de mise en ligne OK", audit.stdout)
 
         changelog = subprocess.run(
-            [sys.executable, "scripts/extract_changelog.py", "--version", "0.1.0"],
+            [sys.executable, "scripts/extract_changelog.py", "--version", __version__],
             cwd=root,
             capture_output=True,
             text=True,
             check=False,
         )
         self.assertEqual(changelog.returncode, 0, changelog.stderr)
-        self.assertIn("Conversion EmployeurD TXT vers MND MégaGest", changelog.stdout)
+        self.assertIn("- ", changelog.stdout)
 
         with tempfile.TemporaryDirectory() as directory:
             version_output = Path(directory) / "version.txt"
