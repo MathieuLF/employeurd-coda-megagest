@@ -2,20 +2,6 @@ name: Préparer l'environnement de revue
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - ".github/workflows/copilot-setup-steps.yml"
-      - ".github/copilot-instructions.md"
-      - "AGENTS.md"
-      - "pyproject.toml"
-      - "scripts/agent_validate.py"
-  pull_request:
-    paths:
-      - ".github/workflows/copilot-setup-steps.yml"
-      - ".github/copilot-instructions.md"
-      - "AGENTS.md"
-      - "pyproject.toml"
-      - "scripts/agent_validate.py"
 
 jobs:
   copilot-setup-steps:
