@@ -50,7 +50,7 @@ from employeurd_megagest.update_check import DEFAULT_TIMEOUT_SECONDS, DEFAULT_UP
 from employeurd_megagest.validator import convert_account, mnd_totals, source_totals
 from employeurd_megagest.version import __version__
 from employeurd_megagest.writer_mnd import MND_LINE_LENGTH
-from scripts import append_release_verification, audit_release_readiness, generate_release_manifest, submit_virustotal
+from scripts import agent_validate, append_release_verification, audit_release_readiness, generate_release_manifest, submit_virustotal
 from scripts.submit_virustotal import collect_detections
 
 
@@ -914,6 +914,45 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertIn("EmployeurD-MegaGest-v", site_js)
         self.assertIn("-portable\\.zip", site_js)
         self.assertNotIn("findAsset(assets, /\\.exe", site_js)
+
+    def test_agent_review_environment_is_documented_and_fast_to_setup(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        agents = (root / "AGENTS.md").read_text(encoding="utf-8")
+        copilot = (root / ".github" / "copilot-instructions.md").read_text(encoding="utf-8")
+        setup = (root / ".github" / "workflows" / "copilot-setup-steps.yml").read_text(encoding="utf-8")
+        contributing = (root / "CONTRIBUTING.md").read_text(encoding="utf-8")
+        pr_template = (root / ".github" / "pull_request_template.md").read_text(encoding="utf-8")
+
+        self.assertIn("Guide de contribution automatisée", agents)
+        self.assertNotIn("Instructions pour les agents", agents)
+        self.assertIn("Guide de revue du dépôt", copilot)
+        self.assertNotIn("Instructions Copilot", copilot)
+        self.assertIn("Préparer l'environnement de revue", setup)
+        self.assertIn("python scripts/agent_validate.py", agents)
+        self.assertIn("aucune clé secrète", agents.lower())
+        self.assertIn("ni base de données", copilot)
+        self.assertIn("VT_API_KEY", copilot)
+        self.assertIn("copilot-setup-steps:", setup)
+        self.assertIn("runs-on: windows-latest", setup)
+        self.assertIn("timeout-minutes: 5", setup)
+        self.assertIn("python -m pip install -e .", setup)
+        self.assertIn("Vérifier les imports", setup)
+        self.assertIn("python scripts/agent_validate.py", contributing)
+        self.assertIn("python scripts/agent_validate.py", pr_template)
+        self.assertNotIn("0.1.0", pr_template)
+
+    def test_agent_validate_uses_project_version_for_release_audit(self) -> None:
+        version = agent_validate.project_version(Path(__file__).resolve().parents[1])
+        commands = agent_validate.validation_commands(version=version)
+
+        self.assertEqual(version, __version__)
+        self.assertIn([sys.executable, "-m", "unittest", "discover", "-s", "tests"], commands)
+        self.assertIn([sys.executable, "-X", "pycache_prefix=build/pycache", "-m", "compileall", "src", "scripts"], commands)
+        self.assertIn([sys.executable, "scripts/audit_release_readiness.py", "--version", version], commands)
+        self.assertNotIn(
+            [sys.executable, "scripts/audit_release_readiness.py", "--version", "0.1.0"],
+            commands,
+        )
 
     def test_release_audit_flags_direct_exe_assets(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

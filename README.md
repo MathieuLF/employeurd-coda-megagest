@@ -31,6 +31,15 @@ Un rapport SPD640-P CSV peut être ajouté au besoin pour confirmer les totaux d
 - [Mentions légales](docs/mentions_legales.md)
 - [Licence MIT](LICENSE)
 
+## Développement
+
+```powershell
+python -m pip install -e .
+python scripts/agent_validate.py
+```
+
+La validation courante ne demande ni base de données, ni serveur, ni clé secrète.
+
 ## Important
 
 Ne publiez jamais de fichier de paie réel dans GitHub, dans un billet public ou dans un service externe.
