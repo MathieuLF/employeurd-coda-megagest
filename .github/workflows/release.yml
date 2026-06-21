@@ -1,9 +1,6 @@
-name: Brouillon de mise en ligne GitHub
+name: Préparer une mise en ligne manuelle
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
   workflow_dispatch:
     inputs:
       tag_name:

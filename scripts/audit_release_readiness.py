@@ -171,14 +171,20 @@ def _release_policy_issues(root: Path) -> list[str]:
             issues.append(f"Asset d'icône produit manquant: {asset.relative_to(root)}")
 
     release_workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    if re.search(r"(?m)^  push:\s*$", release_workflow):
+        issues.append(".github/workflows/release.yml ne doit pas créer de brouillon automatiquement sur push de tag.")
     if "--fail-on-detections" not in release_workflow:
         issues.append(".github/workflows/release.yml doit bloquer les détections VirusTotal.")
-    if "-portable.zip" not in release_workflow or "-portable.exe.sha256" not in release_workflow:
-        issues.append(".github/workflows/release.yml doit publier le paquet portable et ses empreintes.")
+    if '"dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION-portable.zip"' not in release_workflow:
+        issues.append(".github/workflows/release.yml doit publier le ZIP portable comme asset principal.")
+    if "-portable.exe.sha256" not in release_workflow:
+        issues.append(".github/workflows/release.yml doit publier l'empreinte de l'exécutable contenu dans le ZIP.")
     if "generate_release_manifest.py" not in release_workflow or ".release-manifest.json" not in release_workflow:
         issues.append(".github/workflows/release.yml doit générer et publier le manifeste de mise en ligne.")
     if "append_release_verification.py" not in release_workflow:
         issues.append(".github/workflows/release.yml doit afficher le score VirusTotal dans les notes de mise en ligne.")
+    if re.search(r"(?m)^\s*\"dist/EmployeurD-MegaGest-v\$env:RELEASE_VERSION\.exe\"\s*`?$", release_workflow):
+        issues.append(".github/workflows/release.yml ne doit pas publier de .exe direct sans certificat.")
 
     publish_script = (root / "scripts" / "publish_release.ps1").read_text(encoding="utf-8")
     if "generate_release_manifest.py" not in publish_script or ".release-manifest.json" not in publish_script:
@@ -187,6 +193,16 @@ def _release_policy_issues(root: Path) -> list[str]:
         issues.append("scripts/publish_release.ps1 doit afficher le score VirusTotal dans les notes de mise en ligne.")
     if "$CreateGitHubRelease -and $AllowVirusTotalDetections" not in publish_script:
         issues.append("scripts/publish_release.ps1 doit empêcher une mise en ligne GitHub avec des détections VirusTotal ignorées.")
+    if "Assert-NoExistingReleaseTarget" not in publish_script or "gh release view $Tag" not in publish_script:
+        issues.append("scripts/publish_release.ps1 doit refuser une mise en ligne GitHub déjà existante.")
+    if 'git ls-remote --tags origin "refs/tags/$Tag"' not in publish_script:
+        issues.append("scripts/publish_release.ps1 doit refuser un tag distant déjà existant.")
+    if "Assert-OfficialReleaseMainState" not in publish_script or '$Branch -ne "main"' not in publish_script:
+        issues.append("scripts/publish_release.ps1 doit exiger main pour une mise en ligne officielle.")
+    if "refs/remotes/origin/main" not in publish_script:
+        issues.append("scripts/publish_release.ps1 doit vérifier que origin/main pointe sur HEAD.")
+    if re.search(r"(?m)^\s*\"dist/\$Name-v\$ReleaseVersion\.exe\"\s*,?\s*$", publish_script):
+        issues.append("scripts/publish_release.ps1 ne doit pas publier de .exe direct sans certificat.")
 
     return issues
 

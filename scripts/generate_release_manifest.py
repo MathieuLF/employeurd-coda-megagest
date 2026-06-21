@@ -69,7 +69,8 @@ def main() -> int:
             "format": "portable_zip",
             "signed": signature == "Valid",
             "authenticode_status": signature,
-            "note": "Paquet non signé lorsque authenticode_status vaut NotSigned; l'intégrité est vérifiée par SHA256 et VirusTotal.",
+            "primary_asset_policy": "portable_zip_only",
+            "smartscreen_note": "Application non signée; avertissement SmartScreen possible.",
         },
         "artifacts": [
             {

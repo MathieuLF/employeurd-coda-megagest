@@ -22,6 +22,42 @@ function Assert-LastExitCode([string]$Message) {
     }
 }
 
+function Assert-NoExistingReleaseTarget([string]$Tag) {
+    gh release view $Tag *> $null
+    if ($LASTEXITCODE -eq 0) {
+        throw "La mise en ligne GitHub $Tag existe déjà. Supprime-la ou choisis une nouvelle version."
+    }
+
+    $RemoteTag = git ls-remote --tags origin "refs/tags/$Tag"
+    Assert-LastExitCode "Vérification du tag distant impossible"
+    if (-not [string]::IsNullOrWhiteSpace($RemoteTag)) {
+        throw "Le tag distant $Tag existe déjà. Supprime-le ou choisis une nouvelle version."
+    }
+}
+
+function Assert-OfficialReleaseMainState {
+    $Branch = (git branch --show-current).Trim()
+    if ($Branch -ne "main") {
+        throw "Une mise en ligne GitHub officielle doit être créée depuis main, pas depuis $Branch."
+    }
+
+    $Status = git status --porcelain
+    if ($Status) {
+        throw "Le dépôt doit être propre avant de créer la mise en ligne GitHub officielle."
+    }
+
+    git fetch origin main --quiet
+    Assert-LastExitCode "Actualisation de origin/main impossible"
+
+    $Head = (git rev-parse HEAD).Trim()
+    Assert-LastExitCode "Lecture de HEAD impossible"
+    $OriginMain = (git rev-parse refs/remotes/origin/main).Trim()
+    Assert-LastExitCode "Lecture de origin/main impossible"
+    if ($Head -ne $OriginMain) {
+        throw "origin/main doit pointer sur HEAD avant de créer la mise en ligne GitHub officielle."
+    }
+}
+
 if (-not $AllowDirtyStart) {
     $Status = git status --porcelain
     if ($Status) {
@@ -44,8 +80,13 @@ python @PrepareArgs
 Assert-LastExitCode "Préparation de la version impossible"
 $ReleaseVersion = (Get-Content -LiteralPath $VersionTemp.FullName -Raw).Trim()
 Remove-Item -LiteralPath $VersionTemp.FullName -Force
+$Tag = "v$ReleaseVersion"
 
 Write-Host "Mise en ligne préparée pour v$ReleaseVersion"
+
+if ($CreateGitHubRelease) {
+    Assert-NoExistingReleaseTarget $Tag
+}
 
 .\scripts\release.ps1 -Version $ReleaseVersion -AllowDirty
 
@@ -114,7 +155,6 @@ if ($RemainingStatus) {
     throw "Il reste des changements non commités après le commit de version. Corrige le dépôt avant de créer le tag."
 }
 
-$Tag = "v$ReleaseVersion"
 git rev-parse -q --verify "refs/tags/$Tag" *> $null
 if ($LASTEXITCODE -ne 0) {
     git tag -a $Tag -m "EmployeurD-MegaGest v$ReleaseVersion"
@@ -133,6 +173,7 @@ if ($CreateGitHubRelease) {
     if (-not $Push) {
         throw "Ajoute -Push pour envoyer la branche et le tag avant de créer la mise en ligne GitHub."
     }
+    Assert-OfficialReleaseMainState
     if (-not (Test-Path $VirusTotalReport)) {
         throw "Rapport VirusTotal manquant: $VirusTotalReport"
     }

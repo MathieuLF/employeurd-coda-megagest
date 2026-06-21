@@ -35,6 +35,7 @@ class UpdateCheckResult:
     published_at: str | None = None
     release_notes: str | None = None
     message: str = ""
+    release_page_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -104,12 +105,8 @@ def _build_update_result(
             resolved_url,
             message="La réponse de mise à jour est incomplète.",
         )
-    download_url = (
-        payload.get("download_url")
-        or release_asset_url(payload, ".zip", version=latest)
-        or release_asset_url(payload, ".exe", version=latest)
-        or payload.get("html_url")
-    )
+    release_page_url = _release_page_url(payload, resolved_url, version=latest)
+    download_url = payload.get("download_url") or release_asset_url(payload, ".zip", version=latest) or release_page_url
     update_available = _version_tuple(latest) > _version_tuple(current_version)
     sha256 = extract_sha256(payload.get("sha256"))
     if not sha256:
@@ -125,6 +122,7 @@ def _build_update_result(
         published_at=payload.get("published_at") or payload.get("date"),
         release_notes=payload.get("release_notes") or payload.get("body"),
         message="Nouvelle version disponible." if update_available else "Application à jour.",
+        release_page_url=release_page_url,
     )
 
 
@@ -218,6 +216,18 @@ def release_url_for_version(url: str, version: str) -> str:
     if "/releases/latest" in resolved:
         return resolved.replace("/releases/latest", f"/releases/tags/v{version.strip().lstrip('v')}")
     return resolved
+
+
+def _release_page_url(payload: dict[str, Any], resolved_url: str, *, version: str) -> str | None:
+    value = payload.get("html_url") or payload.get("release_page_url")
+    if value:
+        return str(value)
+    repo = _github_repo_from_url(resolved_url)
+    if repo:
+        owner, name = repo
+        cleaned_version = version.strip().lstrip("v")
+        return f"https://github.com/{owner}/{name}/releases/tag/v{cleaned_version}"
+    return None
 
 
 def release_asset_url(payload: dict[str, Any], suffix: str, *, version: str | None = None) -> str | None:

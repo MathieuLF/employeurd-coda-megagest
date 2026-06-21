@@ -42,6 +42,9 @@
     if (releasePageLink) {
       releasePageLink.href = releasesUrl;
     }
+    if (note) {
+      note.hidden = false;
+    }
     setText(note, noteText);
   };
 
@@ -52,9 +55,7 @@
     });
 
   const findPackage = (assets) =>
-    findAsset(assets, /portable.*\.zip$/i) ||
-    findAsset(assets, /\.zip$/i, /sha256|sbom|manifest|virustotal/i) ||
-    findAsset(assets, /\.exe$/i, /sha256|virustotal/i);
+    findAsset(assets, /^EmployeurD-MegaGest-v[^/\\]+-portable\.zip$/i);
 
   const findSha = (assets, packageName) => {
     if (packageName) {
@@ -133,7 +134,7 @@
 
     const assets = Array.isArray(release.assets) ? release.assets : [];
     const packageAsset = findPackage(assets);
-    const shaAsset = findSha(assets, packageAsset && packageAsset.name);
+    const shaAsset = packageAsset ? findSha(assets, packageAsset.name) : null;
     const virusTotalAsset = findVirusTotal(assets);
     const releaseUrl = release.html_url || releasesUrl;
     const published = release.published_at ? new Date(release.published_at) : null;
@@ -154,10 +155,11 @@
       setText(packageTarget, packageAsset.name);
       if (downloadLink) {
         downloadLink.href = packageAsset.browser_download_url;
+        downloadLink.textContent = "Télécharger le ZIP";
         downloadLink.hidden = false;
       }
     } else {
-      setText(packageTarget, "Aucun paquet Windows trouvé dans cette mise en ligne.");
+      setText(packageTarget, "Aucun ZIP portable disponible pour cette version.");
       if (downloadLink) {
         downloadLink.hidden = true;
       }
@@ -167,12 +169,10 @@
     setText(shaTarget, shaValue || "Non publiée avec cette mise en ligne.");
 
     if (virusTotalAsset) {
-      const link = document.createElement("a");
-      link.href = virusTotalAsset.browser_download_url;
-      link.textContent = virusTotalAsset.name;
-      verificationTarget.replaceChildren(link);
+      setText(verificationTarget, "Rapport VirusTotal disponible.");
       if (virusTotalLink) {
         virusTotalLink.href = virusTotalAsset.browser_download_url;
+        virusTotalLink.textContent = "Rapport VirusTotal";
         virusTotalLink.hidden = false;
       }
     } else {
@@ -182,7 +182,13 @@
       }
     }
 
-    setText(note, "Informations récupérées depuis GitHub Releases.");
+    if (releasePageLink) {
+      releasePageLink.textContent = "Toutes les versions";
+    }
+
+    if (note) {
+      note.hidden = true;
+    }
   };
 
   hydrate();

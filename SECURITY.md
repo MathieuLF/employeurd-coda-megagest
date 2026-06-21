@@ -15,7 +15,9 @@ L'application travaille localement. Les fichiers de paie ne doivent jamais être
 
 Téléchargez l'application depuis la page officielle des versions GitHub.
 
-Chaque version publique doit fournir les empreintes SHA256. L'exécutable public peut aussi être accompagné d'un rapport VirusTotal.
+Chaque version publique doit fournir les empreintes SHA256. Le paquet Windows officiel est un ZIP portable accompagné d'un manifeste de mise en ligne et d'un rapport VirusTotal sur l'exécutable public.
+
+Aucun certificat de signature payant n'est utilisé. SmartScreen peut donc afficher un avertissement d'application non reconnue.
 
 La fenêtre `Sécurité` de l'application permet de comparer l'empreinte de la version ouverte avec l'empreinte publiée.
 

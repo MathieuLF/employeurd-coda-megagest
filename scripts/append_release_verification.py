@@ -56,18 +56,16 @@ def build_verification_section(manifest: dict[str, Any], virustotal: dict[str, A
     suspicious = virustotal.get("suspicious")
     status = virustotal.get("status") or "n/d"
     link = virustotal.get("link") or ""
-    signed = bool(manifest.get("distribution", {}).get("signed"))
-    signature = manifest.get("distribution", {}).get("authenticode_status") or "n/d"
 
     lines = [
         "## Vérification publique",
         "",
+        "- Paquet publié: `ZIP portable`.",
         f"- Score VirusTotal: `{malicious} malicious / {suspicious} suspicious`.",
         f"- Statut VirusTotal: `{status}`.",
         f"- Rapport détaillé: `{report_name}`.",
-        f"- SHA256 exécutable: `{exe.get('sha256', 'n/d')}`.",
         f"- SHA256 paquet portable: `{portable.get('sha256', 'n/d')}`.",
-        f"- Signature Windows: `{'signé' if signed else signature}`.",
+        f"- SHA256 exécutable inclus: `{exe.get('sha256', 'n/d')}`.",
         "- Données de paie transmises pendant cette vérification: `non`.",
     ]
     if link:
