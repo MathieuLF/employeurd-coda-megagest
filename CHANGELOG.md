@@ -4,6 +4,12 @@ Toutes les versions officielles publiées sur GitHub doivent reprendre la sectio
 
 ## [Non publié]
 
+## [0.1.2] - 2026-06-21
+
+- Mise en ligne officielle recentrée sur le ZIP portable, avec garde-fous contre les doublons de release et les assets .exe directs.
+- Vérification de version silencieuse au démarrage, journal plus lisible avec lien de mise à jour cliquable, et badge Sécurité OK explicité.
+- Microsite public clarifié pour présenter le ZIP portable, les empreintes et le rapport VirusTotal sans surcharger l'utilisateur.
+- Environnement de revue simplifié autour de Python 3.12 et d'une commande de validation unique.
 ## [0.1.1] - 2026-06-21
 
 - Retrait du rapport sécurité Markdown distinct des fichiers joints aux mises en ligne; les informations utiles restent dans les notes, le manifeste JSON et le rapport VirusTotal.
