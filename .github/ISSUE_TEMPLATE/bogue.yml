@@ -1,39 +1,47 @@
-name: Signalement de bogue
-description: Signaler un comportement qui ne fonctionne pas comme prévu.
-title: "[Bogue] "
+name: Problème ou bogue
+description: Signaler un problème, un blocage ou un comportement inattendu.
+title: "[Problème] "
 body:
   - type: markdown
     attributes:
       value: |
-        Merci de ne joindre aucun fichier de paie réel, rapport SPD réel, MND réel, secret ou capture contenant des données sensibles.
+        Merci de ne joindre aucun fichier réel ni capture contenant des données sensibles. Des exemples inventés suffisent.
   - type: textarea
     id: probleme
     attributes:
-      label: Ce qui se passe
+      label: Que se passe-t-il?
       description: Décrivez le problème en mots simples.
-      placeholder: L'application affiche..., le MND n'est pas créé..., le message indique...
+      placeholder: "Exemple: l'application se ferme, un bouton ne répond pas, le résultat semble incorrect..."
     validations:
       required: true
   - type: textarea
+    id: attendu
+    attributes:
+      label: Ce que vous attendiez
+      description: Si possible, indiquez ce que vous pensiez voir ou obtenir.
+      placeholder: "Exemple: je m'attendais à voir un message de confirmation."
+    validations:
+      required: false
+  - type: textarea
     id: etapes
     attributes:
-      label: Étapes pour reproduire
-      description: Indiquez les actions, sans données réelles.
-      placeholder: 1. Ajouter un TXT synthétique; 2. Ajouter un SPD640-P synthétique; 3. Cliquer sur Vérifier la paie...
+      label: Comment refaire le problème
+      description: Indiquez les actions principales. Si vous ne savez pas, dites simplement ce que vous faisiez.
+      placeholder: "1. J'ouvre l'application; 2. Je clique sur ...; 3. Le problème apparaît."
     validations:
-      required: true
+      required: false
   - type: input
     id: version
     attributes:
       label: Version
-      placeholder: Exemple : 0.1.0
+      placeholder: "Exemple: 0.1.0"
     validations:
       required: false
   - type: textarea
     id: message
     attributes:
-      label: Message affiché
-      description: Copiez le message exact si possible, sans chemin personnel ni donnée sensible.
+      label: Message ou capture utile
+      description: Copiez le message exact ou décrivez la capture, sans donnée sensible.
     validations:
       required: false
   - type: checkboxes

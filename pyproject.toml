@@ -1,7 +1,7 @@
 [project]
 name = "employeurd-to-megagest-mnd"
 version = "0.1.0"
-description = "Convertisseur local EmployeurD vers MégaGest MND avec validations strictes."
+description = "Outil Windows local pour créer un fichier MND pour MégaGest à partir d'une écriture détaillée EmployeurD (TXT), avec contrôle des soldes et rapports de validation."
 requires-python = ">=3.11"
 license = "MIT"
 
