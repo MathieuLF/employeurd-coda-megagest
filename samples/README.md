@@ -1,28 +1,29 @@
-# Donnees synthetiques
+# Données synthétiques
 
 Ces fichiers sont fictifs et servent seulement aux tests locaux. Ils ne doivent
-pas etre remplaces par des fichiers de paie, SPD ou MND reels.
+pas être remplacés par des fichiers de paie, SPD ou MND réels.
 
-## Scenarios
+## Scénarios
 
-- `employeurd-balanced.txt`: 20 lignes, un lot, une date, debit et credit de
+- `employeurd-balanced.txt`: 20 lignes, un lot, une date, débit et crédit de
   `6643.00`.
-- `OPD_RP_00001234_SPD640-P_SYNTHETIQUE.CSV`: rapport SPD640-P theorique qui
-  couvre des gains, retenues, montants employeur, banque vacances code `305` et
-  une banque non retenue par la formule de controle.
-- `employeurd-unbalanced.txt`: ecart volontaire de `10.50` cote credit.
-- `employeurd-unknown-account.txt`: comptes GL fictifs hors plan connu, mais
-  fichier equilibre pour le mode permissif.
-- `employeurd-zero-amount.txt`: lignes a montant zero, conservees pour verifier
+- `OPD_RP_00001234_SPD640-P_SYNTHETIQUE.CSV`: rapport SPD640-P théorique qui
+  couvre des gains, des retenues, des montants employeur, une banque de
+  vacances avec le code `305` et une ligne de banque non retenue par la formule
+  de contrôle.
+- `employeurd-unbalanced.txt`: écart volontaire de `10.50` du côté du crédit.
+- `employeurd-unknown-account.txt`: comptes GL fictifs hors du plan connu, mais
+  fichier équilibré pour le mode permissif.
+- `employeurd-zero-amount.txt`: lignes à montant zéro, conservées pour vérifier
   la lecture et le rapprochement, mais invalides si `reject_zero_amount_lines`
   est actif.
 
-## Totaux de reference
+## Totaux de référence
 
-La formule SPD640-P configuree additionne:
+La formule SPD640-P configurée additionne:
 
 - `TYPE=G / MONTANTS`
 - `TYPE=D / MNTS/EMPLOYEUR`
 - `TYPE=G / CODE=305 / MNTS BANQUE`
 
-Pour le scenario principal: `6200.00 + 330.75 + 112.25 = 6643.00`.
+Pour le scénario principal: `6200.00 + 330.75 + 112.25 = 6643.00`.

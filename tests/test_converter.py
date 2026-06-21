@@ -334,8 +334,17 @@ class EmployeurDMegaGestTest(unittest.TestCase):
 
         for source_name, report_name, should_match in pairs:
             with self.subTest(source=source_name, report=report_name):
-                entries = parse_employeurd_file(samples / source_name)
-                reconciliation = reconcile_spd640(entries, samples / report_name, config, required=True)
+                source_path = samples / source_name
+                report_path = samples / report_name
+                source_lines = source_path.read_text(encoding="ascii").splitlines()
+                self.assertEqual({len(line) for line in source_lines}, {77})
+
+                entries = parse_employeurd_file(source_path)
+                report = parse_spd640_csv(report_path)
+                self.assertEqual(report.batch, "00001234")
+                self.assertEqual(report.period, "202606")
+                self.assertGreater(report.row_count, 0)
+                reconciliation = reconcile_spd640(entries, report_path, config, required=True)
 
                 self.assertEqual(reconciliation.status == "success", should_match)
 
