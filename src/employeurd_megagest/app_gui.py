@@ -35,7 +35,7 @@ from .gui_texts import (
 from .gui_theme import Palette, configure_theme, status_colors
 from .models import ConversionResult, ReconciliationResult
 from .platform_actions import open_folder
-from .preferences import ensure_preferences_dir, load_preferences, remember_output_dir, remember_update_check_on_startup
+from .preferences import ensure_preferences_dir, load_preferences, remember_output_dir
 from .resource_paths import default_config_dir, package_asset_path
 from .update_check import DEFAULT_TIMEOUT_SECONDS, UpdateCheckResult, check_for_update, configured_update_url
 from .user_messages import friendly_error_message, technical_error_message
@@ -45,6 +45,16 @@ from .version import __version__
 _STATUS_ICON_CACHE: dict[str, tk.PhotoImage] | None = None
 UPDATE_CHECK_TIMEOUT_SECONDS = DEFAULT_TIMEOUT_SECONDS
 UPDATE_CHECK_UI_DEADLINE_SECONDS = 2.5
+JOURNAL_LINK_PREFIX = "::link::"
+SECURITY_TOOLTIP_TEXT = "\n".join(
+    [
+        "Traitement local des fichiers de paie.",
+        "Aucun fichier de paie transmis.",
+        "Logs conservés sur cet ordinateur.",
+        "GitHub est consulté seulement pour les métadonnées publiques.",
+        "SHA256 et rapports de sécurité vérifiables pour le ZIP officiel.",
+    ]
+)
 
 
 def _status_icon_images() -> dict[str, tk.PhotoImage]:
@@ -185,6 +195,74 @@ class StatusBadge(tk.Frame):
             self._icon_label.image = image
         else:
             self._icon_label.configure(image="", text="●", foreground=self._fg, font=self._font, width=2)
+
+
+class Tooltip:
+    def __init__(self, widget: tk.Widget, text: str, *, delay_ms: int = 450) -> None:
+        self.widget = widget
+        self.text = text
+        self.delay_ms = delay_ms
+        self._after_id: str | None = None
+        self._window: tk.Toplevel | None = None
+        for target in _widget_tree(widget):
+            target.bind("<Enter>", self._schedule, add="+")
+            target.bind("<Leave>", self._hide, add="+")
+            target.bind("<ButtonPress>", lambda event: self._hide(event, force=True), add="+")
+
+    def _schedule(self, _event=None) -> None:  # noqa: ANN001
+        self._cancel()
+        self._after_id = self.widget.after(self.delay_ms, self._show)
+
+    def _show(self) -> None:
+        self._after_id = None
+        if self._window or not self.text:
+            return
+        x = self.widget.winfo_pointerx() + 14
+        y = self.widget.winfo_pointery() + 12
+        window = tk.Toplevel(self.widget)
+        window.wm_overrideredirect(True)
+        window.wm_geometry(f"+{x}+{y}")
+        window.configure(background=Palette.text)
+        label = tk.Label(
+            window,
+            text=self.text,
+            justify="left",
+            wraplength=360,
+            background=Palette.text,
+            foreground="#ffffff",
+            padx=10,
+            pady=8,
+            font=("Segoe UI", 9),
+        )
+        label.grid(row=0, column=0)
+        self._window = window
+
+    def _hide(self, _event=None, *, force: bool = False) -> None:  # noqa: ANN001
+        if not force and self._pointer_inside_widget():
+            return
+        self._cancel()
+        if self._window:
+            self._window.destroy()
+            self._window = None
+
+    def _cancel(self) -> None:
+        if self._after_id:
+            self.widget.after_cancel(self._after_id)
+            self._after_id = None
+
+    def _pointer_inside_widget(self) -> bool:
+        x = self.widget.winfo_pointerx()
+        y = self.widget.winfo_pointery()
+        left = self.widget.winfo_rootx()
+        top = self.widget.winfo_rooty()
+        return left <= x <= left + self.widget.winfo_width() and top <= y <= top + self.widget.winfo_height()
+
+
+def _widget_tree(widget: tk.Widget) -> tuple[tk.Widget, ...]:
+    widgets = [widget]
+    for child in widget.winfo_children():
+        widgets.extend(_widget_tree(child))
+    return tuple(widgets)
 
 
 class CheckOption(tk.Frame):
@@ -358,15 +436,12 @@ class EmployeurDMegaGestApp(tk.Tk):
         self._set_initial_geometry()
         self._set_product_icon()
 
-        config = load_app_config(default_config_dir())
         self.controller = GuiController(config_dir=default_config_dir())
-        self.preferences = load_preferences(
-            default_update_check_on_startup=_config_update_check_on_startup(config)
-        )
         try:
             ensure_preferences_dir()
         except OSError:
             pass
+        self.preferences = load_preferences()
         self.source_path = tk.StringVar()
         self.spd640_path = tk.StringVar()
         self.output_dir = tk.StringVar(value=_usable_saved_output_dir(self.preferences.output_dir))
@@ -391,8 +466,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         self._bind_shortcuts()
         self._refresh_all()
 
-        if self.preferences.update_check_on_startup:
-            self.after(750, self._check_update)
+        self.after(750, lambda: self._check_update(silent=True))
 
     def _set_product_icon(self) -> None:
         icon_paths = [
@@ -465,10 +539,11 @@ class EmployeurDMegaGestApp(tk.Tk):
         badges.grid(row=0, column=1, rowspan=2, sticky="ne", padx=(14, 0))
         self.status_badge = _badge_label(badges, "Paie à préparer")
         self.security_badge = _badge_label(badges, "Sécurité OK")
-        self.update_badge = _badge_label(badges, "Version à vérifier")
+        self.update_badge = _badge_label(badges, "Version non vérifiée")
         self.status_badge.grid(row=0, column=0, padx=(0, 8))
         self.security_badge.grid(row=0, column=1, padx=(0, 8))
         self.update_badge.grid(row=0, column=2)
+        self._security_tooltip = Tooltip(self.security_badge, SECURITY_TOOLTIP_TEXT)
         return header
 
     def _build_inputs_card(self, parent: ttk.Frame) -> ttk.Frame:
@@ -635,7 +710,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         _link_label(links, REPOSITORY_LINK_TEXT, lambda: webbrowser.open(REPOSITORY_URL)).grid(row=0, column=2, padx=(0, 12))
         _link_label(links, Text.security, self._show_security).grid(row=0, column=3, padx=(0, 12))
         _link_label(links, Text.support, self._show_support).grid(row=0, column=4, padx=(0, 12))
-        self.update_button = ttk.Button(links, text=Text.check_updates, command=self._check_update, style="Quiet.TButton")
+        self.update_button = ttk.Button(links, text=Text.check_updates, command=lambda: self._check_update(silent=False), style="Quiet.TButton")
         self.update_button.grid(row=0, column=5)
         return footer
 
@@ -644,7 +719,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         self.bind_all("<Control-O>", lambda _event: self._choose_source())
         self.bind_all("<Control-g>", lambda _event: self._generate())
         self.bind_all("<Control-G>", lambda _event: self._generate())
-        self.bind_all("<F5>", lambda _event: self._check_update())
+        self.bind_all("<F5>", lambda _event: self._check_update(silent=False))
 
     def _choose_source(self) -> None:
         selected = filedialog.askopenfilename(
@@ -822,25 +897,26 @@ class EmployeurDMegaGestApp(tk.Tk):
         config = load_app_config(default_config_dir())
         show_security_window(
             self,
-            update_check_on_startup=self.preferences.update_check_on_startup,
             update_url=str(config.updates.get("url", "")),
-            on_toggle_startup=self._set_update_check_on_startup,
         )
 
     def _show_support(self) -> None:
         show_support_window(self)
 
-    def _check_update(self) -> None:
+    def _check_update(self, *, silent: bool) -> None:
         if self.busy or self.update_check_running:
+            if not silent and self.busy:
+                self._log_event("Vérification de version reportée: une opération locale est en cours.")
             return
         config = load_app_config(default_config_dir())
         update_url = str(config.updates.get("url", ""))
         resolved_url = configured_update_url(update_url)
         deadline = time.monotonic() + UPDATE_CHECK_UI_DEADLINE_SECONDS
         self.update_check_running = True
-        self._log_event("Vérification de la version en cours.")
-        self.update_button.configure(text="Vérification...")
-        self.update_button.state(["disabled"])
+        self._log_event("Vérification de version en arrière-plan." if silent else "Vérification manuelle de la version en cours.")
+        if not silent:
+            self.update_button.configure(text="Vérification...")
+            self.update_button.state(["disabled"])
         self._refresh_update_badge()
         result_queue: queue.Queue[UpdateCheckResult] = queue.Queue()
 
@@ -857,31 +933,35 @@ class EmployeurDMegaGestApp(tk.Tk):
                 if time.monotonic() >= deadline:
                     if self.winfo_exists():
                         self.update_check_running = False
-                        self.update_button.state(["!disabled"])
-                        self._update_check_finished(_update_check_deadline_failure(resolved_url))
+                        if not silent:
+                            self.update_button.state(["!disabled"])
+                        self._update_check_finished(_update_check_deadline_failure(resolved_url), silent=silent)
                     return
                 if self.winfo_exists():
                     self.after(100, poll)
                 return
             if self.winfo_exists():
                 self.update_check_running = False
-                self.update_button.state(["!disabled"])
-                self._update_check_finished(result)
+                if not silent:
+                    self.update_button.state(["!disabled"])
+                self._update_check_finished(result, silent=silent)
 
         threading.Thread(target=worker, daemon=True).start()
         self.after(100, poll)
 
-    def _update_check_finished(self, result: UpdateCheckResult) -> None:
+    def _update_check_finished(self, result: UpdateCheckResult, *, silent: bool) -> None:
         self.last_update_result = result
         if result.update_available:
             self.status.set("Mise à jour disponible")
             self.status_detail.set("Une nouvelle version est disponible. Rien ne sera installé automatiquement.")
-            self._log_event("Mise à jour disponible.")
+            latest = f" {result.latest_version}" if result.latest_version else ""
+            self._log_event(f"Mise à jour disponible{latest}.")
         elif result.ok:
-            self._log_event("Vérification terminée : application à jour.")
+            self._log_event("Version vérifiée: application à jour.")
         else:
-            self._log_event("Vérification de mise à jour impossible. L'application demeure utilisable.")
-        self.update_button.configure(text=Text.check_updates)
+            self._log_event("Vérification de version reportée. L'application demeure utilisable.")
+        if not silent:
+            self.update_button.configure(text=Text.check_updates)
         self._append_update_summary(result)
         self._refresh_update_badge()
 
@@ -1002,7 +1082,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         elif self.last_update_result and not self.last_update_result.ok:
             label, status, icon = "Vérification reportée", "warning", "warning"
         else:
-            label, status, icon = "Version à vérifier", "warning", "warning"
+            label, status, icon = "Version non vérifiée", "info", "dot"
         bg, fg = status_colors(status)
         self.update_badge.configure(text=label, icon=icon, background=bg, foreground=fg)
 
@@ -1046,13 +1126,6 @@ class EmployeurDMegaGestApp(tk.Tk):
             return "Le MND sera disponible après une vérification réussie."
         return "Prêt à créer le fichier MND."
 
-    def _set_update_check_on_startup(self, enabled: bool) -> None:
-        try:
-            remember_update_check_on_startup(enabled)
-            self.preferences = load_preferences()
-        except OSError:
-            messagebox.showwarning("Préférences", "Impossible d'enregistrer cette préférence locale.")
-
     def _remember_output_dir(self, output_dir: str) -> None:
         try:
             remember_output_dir(output_dir)
@@ -1090,27 +1163,19 @@ class EmployeurDMegaGestApp(tk.Tk):
             self._refresh_dashboard()
 
     def _append_update_summary(self, result: UpdateCheckResult) -> None:
-        self.journal_summaries = [summary for summary in self.journal_summaries if summary[0] != "update"]
-        self.journal_summaries.append(("update", _journal_update_block(result)))
+        self.journal_summaries = [summary for summary in self.journal_summaries if summary[0] not in {"update", "update_available"}]
+        kind = "update_available" if result.update_available else "update"
+        self.journal_summaries.append((kind, _journal_update_block(result)))
         if hasattr(self, "log_text"):
             self._refresh_dashboard()
 
     def _clear_payroll_summaries(self) -> None:
-        self.journal_summaries = [summary for summary in self.journal_summaries if summary[0] == "update"]
+        self.journal_summaries = [summary for summary in self.journal_summaries if summary[0] in {"update", "update_available"}]
 
 
 def _optional_path(value: str) -> Path | None:
     cleaned = value.strip()
     return Path(cleaned) if cleaned else None
-
-
-def _config_update_check_on_startup(config) -> bool:
-    value = config.updates.get("check_on_startup", False)
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() == "true"
-    return bool(value)
 
 
 def _unexpected_update_check_failure(url: str, error: Exception) -> UpdateCheckResult:
@@ -1361,25 +1426,42 @@ def _journal_summary_block(
 
 
 def _journal_update_block(result: UpdateCheckResult) -> str:
-    lines = [
-        "======= Mise à jour =======",
-        f"Version installée: {result.current_version}",
-        f"Dernière version: {result.latest_version or 'n/d'}",
-        f"Date: {result.published_at or 'n/d'}",
-        f"État: {result.message}",
-        f"SHA256 attendu: {result.sha256 or 'n/d'}",
-    ]
-    if result.download_url:
-        lines.append(f"Lien: {result.download_url}")
-    lines.extend(
-        [
-            "",
-            "Aucun fichier de paie n'a été transmis pendant cette vérification.",
-        ]
-    )
-    if not result.ok:
-        lines.append("L'utilitaire demeure utilisable hors ligne.")
+    lines = ["======= Mise à jour ======="]
+    if result.update_available:
+        version = result.latest_version or "plus récente"
+        lines.extend(
+            [
+                f"État: Nouvelle version disponible ({version}).",
+                f"Version installée: {result.current_version}",
+            ]
+        )
+        release_url = result.release_page_url or result.download_url
+        if release_url:
+            lines.append(_journal_link_line("Ouvrir la page de mise à jour", release_url))
+    elif result.ok:
+        lines.append(f"État: Application à jour ({result.current_version}).")
+    else:
+        lines.append("État: Vérification reportée. L'application demeure utilisable hors ligne.")
+        if result.message:
+            lines.append(f"Détail: {result.message}")
+    lines.extend(["", "Aucun fichier de paie n'a été transmis."])
     return "\n".join(lines).strip()
+
+
+def _journal_link_line(label: str, url: str) -> str:
+    return f"{JOURNAL_LINK_PREFIX}{label}::{url}"
+
+
+def _parse_journal_link(line: str) -> tuple[str, str] | None:
+    if not line.startswith(JOURNAL_LINK_PREFIX):
+        return None
+    content = line.removeprefix(JOURNAL_LINK_PREFIX)
+    if "::" not in content:
+        return None
+    label, url = content.split("::", 1)
+    if not label or not url.startswith(("http://", "https://")):
+        return None
+    return label, url
 
 
 def _set_journal_text(widget: tk.Text, activity_log: list[str], summaries: list[tuple[str, str]]) -> None:
@@ -1389,20 +1471,39 @@ def _set_journal_text(widget: tk.Text, activity_log: list[str], summaries: list[
     widget.tag_configure("summary_header_validation", background=Palette.success_bg, foreground=Palette.success, font=("Segoe UI Semibold", 9), spacing1=7, spacing3=4)
     widget.tag_configure("summary_header_generation", background=Palette.info_bg, foreground=Palette.primary_dark, font=("Segoe UI Semibold", 9), spacing1=7, spacing3=4)
     widget.tag_configure("summary_header_update", background=Palette.disabled_bg, foreground=Palette.muted, font=("Segoe UI Semibold", 9), spacing1=7, spacing3=4)
+    widget.tag_configure("summary_header_update_available", background=Palette.warning_bg, foreground=Palette.warning, font=("Segoe UI Semibold", 9), spacing1=7, spacing3=4)
     widget.tag_configure("summary_body", foreground=Palette.text, lmargin1=8, lmargin2=8)
+    widget.tag_configure("summary_body_update_available", foreground=Palette.warning, font=("Segoe UI Semibold", 9), lmargin1=8, lmargin2=8)
     widget.tag_configure("summary_file", foreground=Palette.primary_dark, lmargin1=16, lmargin2=16)
     widget.tag_configure("summary_label", foreground=Palette.primary_dark, font=("Segoe UI Semibold", 9), lmargin1=8, lmargin2=8, spacing1=3)
+    widget.tag_configure("summary_link", foreground=Palette.primary, underline=True, font=("Segoe UI Semibold", 9), lmargin1=8, lmargin2=8)
+    widget.tag_bind("summary_link", "<Enter>", lambda _event: widget.configure(cursor="hand2"))
+    widget.tag_bind("summary_link", "<Leave>", lambda _event: widget.configure(cursor=""))
 
     if activity_log:
         widget.insert("end", "\n".join(activity_log), ("journal",))
 
+    link_index = 0
     for kind, block in summaries:
         if widget.index("end-1c") != "1.0":
             widget.insert("end", "\n\n")
         for line in block.splitlines():
+            parsed_link = _parse_journal_link(line)
+            if parsed_link:
+                label, url = parsed_link
+                link_tag = f"summary_link_{link_index}"
+                link_index += 1
+                widget.tag_configure(link_tag, foreground=Palette.primary, underline=True, font=("Segoe UI Semibold", 9), lmargin1=8, lmargin2=8)
+                widget.tag_bind(link_tag, "<Enter>", lambda _event: widget.configure(cursor="hand2"))
+                widget.tag_bind(link_tag, "<Leave>", lambda _event: widget.configure(cursor=""))
+                widget.tag_bind(link_tag, "<Button-1>", lambda _event, target=url: webbrowser.open(target))
+                widget.insert("end", f"{label}\n", ("summary_link", link_tag))
+                continue
             if line.startswith("======="):
                 if kind == "generation":
                     tag = "summary_header_generation"
+                elif kind == "update_available":
+                    tag = "summary_header_update_available"
                 elif kind == "update":
                     tag = "summary_header_update"
                 else:
@@ -1411,6 +1512,8 @@ def _set_journal_text(widget: tk.Text, activity_log: list[str], summaries: list[
                 tag = "summary_label"
             elif line.startswith("- "):
                 tag = "summary_file"
+            elif kind == "update_available" and line.startswith("État:"):
+                tag = "summary_body_update_available"
             else:
                 tag = "summary_body"
             widget.insert("end", f"{line}\n", (tag,))

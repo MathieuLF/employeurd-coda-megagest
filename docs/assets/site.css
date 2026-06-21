@@ -103,6 +103,10 @@ main {
   padding: 72px 0 40px;
 }
 
+.intro > * {
+  min-width: 0;
+}
+
 .tag {
   margin: 0 0 10px;
   color: var(--green);
@@ -182,6 +186,7 @@ h2 {
 }
 
 .release-card {
+  min-width: 0;
   padding: 24px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -191,7 +196,7 @@ h2 {
 
 .release-card h2 {
   margin-bottom: 10px;
-  font-size: clamp(1.55rem, 3vw, 2.2rem);
+  font-size: clamp(1.45rem, 2.7vw, 2rem);
 }
 
 .release-summary {
@@ -201,7 +206,7 @@ h2 {
 
 .release-card dl {
   display: grid;
-  gap: 14px;
+  gap: 16px;
   margin: 0 0 12px;
 }
 
@@ -217,6 +222,10 @@ h2 {
   color: var(--ink);
 }
 
+.release-card dd {
+  overflow-wrap: anywhere;
+}
+
 .release-card code {
   display: block;
   max-width: 100%;
@@ -225,9 +234,11 @@ h2 {
   border-radius: 7px;
   background: #f8fafc;
   color: #26323f;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   line-height: 1.45;
-  overflow-wrap: anywhere;
+  overflow-x: auto;
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 .release-card a {
@@ -235,16 +246,48 @@ h2 {
 }
 
 .release-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 18px;
-  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.release-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 0.92rem;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+}
+
+.release-actions a:hover,
+.release-actions a:focus {
+  border-color: #b8c4ce;
+  background: #f8fafc;
+}
+
+.release-actions a[data-release-download] {
+  border-color: var(--green);
+  background: var(--green);
+  color: #ffffff;
+}
+
+.release-actions a[data-release-page] {
+  grid-column: 1 / -1;
 }
 
 .release-note {
-  margin: 12px 0 0;
+  margin: 14px 0 0;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.86rem;
 }
 
 .screen {
@@ -385,6 +428,11 @@ footer a {
     width: calc(100% - 28px);
   }
 
+  h1 {
+    font-size: 1.78rem;
+    line-height: 1.12;
+  }
+
   .site-header {
     padding-left: 14px;
     padding-right: 14px;
@@ -392,5 +440,13 @@ footer a {
 
   .button {
     width: 100%;
+  }
+
+  .release-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .release-actions a[data-release-page] {
+    grid-column: auto;
   }
 }

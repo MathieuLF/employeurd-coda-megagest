@@ -23,7 +23,7 @@ LEGAL_NOTICE_TEXT = (
 
 SECURITY_NOTICE_TEXT = (
     "Les fichiers EmployeurD, rapports de contrôle, MND, Markdown et JSON restent sur cet ordinateur. "
-    "La vérification de mise à jour consulte seulement GitHub."
+    "La vérification de version consulte seulement les métadonnées publiques GitHub."
 )
 
 

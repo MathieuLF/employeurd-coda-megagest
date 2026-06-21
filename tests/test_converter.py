@@ -20,9 +20,11 @@ from employeurd_megagest.converter import convert_file
 from employeurd_megagest.audit_log import write_audit_event
 from employeurd_megagest.errors import ValidationFailed
 from employeurd_megagest.app_gui import (
+    SECURITY_TOOLTIP_TEXT,
     _generated_outputs_message,
     _journal_summary_block,
     _journal_update_block,
+    _parse_journal_link,
     _usable_saved_output_dir,
     _validation_mode_style,
     _validation_mode_text,
@@ -48,7 +50,7 @@ from employeurd_megagest.update_check import DEFAULT_TIMEOUT_SECONDS, DEFAULT_UP
 from employeurd_megagest.validator import convert_account, mnd_totals, source_totals
 from employeurd_megagest.version import __version__
 from employeurd_megagest.writer_mnd import MND_LINE_LENGTH
-from scripts import append_release_verification, generate_release_manifest, submit_virustotal
+from scripts import agent_validate, append_release_verification, audit_release_readiness, generate_release_manifest, submit_virustotal
 from scripts.submit_virustotal import collect_detections
 
 
@@ -215,6 +217,19 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertEqual(_validation_mode_style(True, True), "HintSuccess.TLabel")
         self.assertIn("SPD640-P est actif", _validation_mode_text(True, True, "SPD640-P"))
         self.assertEqual(_validation_mode_style(False, False), "HintInfo.TLabel")
+
+    def test_gui_security_badge_tooltip_lists_simple_guards(self) -> None:
+        self.assertIn("Traitement local", SECURITY_TOOLTIP_TEXT)
+        self.assertIn("Aucun fichier de paie transmis", SECURITY_TOOLTIP_TEXT)
+        self.assertIn("GitHub", SECURITY_TOOLTIP_TEXT)
+        self.assertNotIn("VirusTotal", SECURITY_TOOLTIP_TEXT)
+
+    def test_gui_starts_silent_update_check_without_startup_preference(self) -> None:
+        source = (Path(__file__).resolve().parents[1] / "src" / "employeurd_megagest" / "app_gui.py").read_text(encoding="utf-8")
+
+        self.assertIn("self.after(750, lambda: self._check_update(silent=True))", source)
+        self.assertNotIn("if self.preferences.update_check_on_startup:", source)
+        self.assertIn('self.update_button = ttk.Button(links, text=Text.check_updates, command=lambda: self._check_update(silent=False)', source)
 
     def test_parse_generated_mnd_and_roundtrip_totals(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -483,6 +498,7 @@ class EmployeurDMegaGestTest(unittest.TestCase):
             fetch.return_value = {
                 "latest_version": "0.1.1",
                 "download_url": "https://example.invalid/app.exe",
+                "release_page_url": "https://example.invalid/releases/v0.1.1",
                 "sha256": "abc",
                 "published_at": "2026-06-18T12:00:00Z",
                 "release_notes": "Notes synthétiques",
@@ -494,14 +510,21 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertEqual(result.latest_version, "0.1.1")
         self.assertEqual(result.published_at, "2026-06-18T12:00:00Z")
         self.assertEqual(result.release_notes, "Notes synthétiques")
+        self.assertEqual(result.release_page_url, "https://example.invalid/releases/v0.1.1")
 
         journal_block = _journal_update_block(result)
         self.assertIn("======= Mise à jour =======", journal_block)
         self.assertIn("Version installée: 0.1.0", journal_block)
-        self.assertIn("Dernière version: 0.1.1", journal_block)
-        self.assertIn("SHA256 attendu: n/d", journal_block)
-        self.assertIn("Lien: https://example.invalid/app.exe", journal_block)
-        self.assertIn("Aucun fichier de paie n'a été transmis", journal_block)
+        self.assertIn("Nouvelle version disponible (0.1.1)", journal_block)
+        self.assertIn("Ouvrir la page de mise à jour", journal_block)
+        self.assertNotIn("n/d", journal_block)
+        self.assertNotIn("app.exe", journal_block)
+        link_line = next(line for line in journal_block.splitlines() if line.startswith("::link::"))
+        self.assertEqual(
+            _parse_journal_link(link_line),
+            ("Ouvrir la page de mise à jour", "https://example.invalid/releases/v0.1.1"),
+        )
+        self.assertIn("Aucun fichier de paie n'a été transmis.", journal_block)
 
     def test_update_check_reads_github_release_assets(self) -> None:
         expected_hash = "a" * 64
@@ -530,6 +553,27 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertTrue(result.ok)
         self.assertEqual(result.download_url, "https://example.invalid/app-portable.zip")
         self.assertEqual(result.sha256, expected_hash)
+        self.assertEqual(result.release_page_url, "https://example.invalid/releases/v0.1.1")
+
+    def test_update_check_uses_release_page_when_only_exe_asset_exists(self) -> None:
+        with patch("employeurd_megagest.update_check._fetch_json") as fetch_json:
+            fetch_json.return_value = {
+                "tag_name": "v0.1.2",
+                "html_url": "https://example.invalid/releases/v0.1.2",
+                "assets": [
+                    {
+                        "name": "EmployeurD-MegaGest-v0.1.2.exe",
+                        "browser_download_url": "https://example.invalid/app.exe",
+                    },
+                ],
+            }
+
+            result = check_for_update("https://updates.example.invalid/latest.json", current_version="0.1.1")
+
+        self.assertTrue(result.ok)
+        self.assertTrue(result.update_available)
+        self.assertEqual(result.release_page_url, "https://example.invalid/releases/v0.1.2")
+        self.assertEqual(result.download_url, "https://example.invalid/releases/v0.1.2")
 
     def test_update_check_uses_default_url_when_config_is_blank_or_placeholder(self) -> None:
         with patch("employeurd_megagest.update_check._fetch_github_release_page_payload") as fetch:
@@ -604,6 +648,10 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertEqual(
             result.download_url,
             "https://github.com/MathieuLF/employeurd-coda-megagest/releases/download/v0.1.0/EmployeurD-MegaGest-v0.1.0-portable.zip",
+        )
+        self.assertEqual(
+            result.release_page_url,
+            "https://github.com/MathieuLF/employeurd-coda-megagest/releases/tag/v0.1.0",
         )
 
     def test_github_update_check_fails_fast_without_api_retry(self) -> None:
@@ -841,6 +889,149 @@ class EmployeurDMegaGestTest(unittest.TestCase):
             self.assertEqual(version_output.read_text(encoding="utf-8").strip(), "9.9.9")
             self.assertIn("Diff technique", notes_output.read_text(encoding="utf-8"))
 
+    def test_official_release_pipeline_is_manual_and_zip_first_without_paid_certificate(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        publish_script = (root / "scripts" / "publish_release.ps1").read_text(encoding="utf-8")
+        release_script = (root / "scripts" / "release.ps1").read_text(encoding="utf-8")
+        site_js = (root / "docs" / "assets" / "site.js").read_text(encoding="utf-8")
+
+        self.assertIn("Préparer une mise en ligne manuelle", workflow)
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("  push:\n", workflow)
+        self.assertNotIn("WINDOWS_SIGNING_CERTIFICATE", workflow)
+        self.assertNotIn("RequireSigned", publish_script)
+        self.assertNotIn("SignWindowsExecutable", release_script)
+        self.assertIn('"dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION-portable.zip"', workflow)
+        self.assertNotIn('"dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.exe"', workflow)
+        self.assertIn("Assert-NoExistingReleaseTarget", publish_script)
+        self.assertIn("gh release view $Tag", publish_script)
+        self.assertIn('git ls-remote --tags origin "refs/tags/$Tag"', publish_script)
+        self.assertIn("Assert-OfficialReleaseMainState", publish_script)
+        self.assertIn('$Branch -ne "main"', publish_script)
+        self.assertIn("refs/remotes/origin/main", publish_script)
+        self.assertIn("Aucun ZIP portable disponible pour cette version.", site_js)
+        self.assertIn("EmployeurD-MegaGest-v", site_js)
+        self.assertIn("-portable\\.zip", site_js)
+        self.assertNotIn("findAsset(assets, /\\.exe", site_js)
+
+    def test_agent_review_environment_is_documented_and_fast_to_setup(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        agents = (root / "AGENTS.md").read_text(encoding="utf-8")
+        copilot = (root / ".github" / "copilot-instructions.md").read_text(encoding="utf-8")
+        setup = (root / ".github" / "workflows" / "copilot-setup-steps.yml").read_text(encoding="utf-8")
+        contributing = (root / "CONTRIBUTING.md").read_text(encoding="utf-8")
+        pr_template = (root / ".github" / "pull_request_template.md").read_text(encoding="utf-8")
+
+        self.assertIn("Guide de contribution automatisée", agents)
+        self.assertNotIn("Instructions pour les agents", agents)
+        self.assertIn("Guide de revue du dépôt", copilot)
+        self.assertNotIn("Instructions Copilot", copilot)
+        self.assertIn("Préparer l'environnement de revue", setup)
+        self.assertIn("python scripts/agent_validate.py", agents)
+        self.assertIn("aucune clé secrète", agents.lower())
+        self.assertIn("ni base de données", copilot)
+        self.assertIn("VT_API_KEY", copilot)
+        self.assertIn("workflow_dispatch:", setup)
+        self.assertNotIn("\n  push:", setup)
+        self.assertNotIn("\n  pull_request:", setup)
+        self.assertIn("copilot-setup-steps:", setup)
+        self.assertIn("runs-on: windows-latest", setup)
+        self.assertIn("timeout-minutes: 5", setup)
+        self.assertIn("python -m pip install -e .", setup)
+        self.assertIn("Vérifier les imports", setup)
+        self.assertIn("python scripts/agent_validate.py", contributing)
+        self.assertIn("python scripts/agent_validate.py", pr_template)
+        self.assertNotIn("0.1.0", pr_template)
+
+    def test_agent_validate_uses_project_version_for_release_audit(self) -> None:
+        version = agent_validate.project_version(Path(__file__).resolve().parents[1])
+        commands = agent_validate.validation_commands(version=version)
+
+        self.assertEqual(version, __version__)
+        self.assertIn([sys.executable, "-m", "unittest", "discover", "-s", "tests"], commands)
+        self.assertIn([sys.executable, "-X", "pycache_prefix=build/pycache", "-m", "compileall", "src", "scripts"], commands)
+        self.assertIn([sys.executable, "scripts/audit_release_readiness.py", "--version", version], commands)
+        self.assertNotIn(
+            [sys.executable, "scripts/audit_release_readiness.py", "--version", "0.1.0"],
+            commands,
+        )
+
+    def test_python_version_policy_is_312_only(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
+        ci = (root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        agents = (root / "AGENTS.md").read_text(encoding="utf-8")
+
+        self.assertIn('requires-python = ">=3.12"', pyproject)
+        self.assertIn('python-version: "3.12"', ci)
+        self.assertNotIn("matrix:", ci)
+        self.assertNotIn("3.11", ci)
+        self.assertIn("Python 3.12", agents)
+
+    def test_release_audit_flags_direct_exe_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".github" / "workflows").mkdir(parents=True)
+            (root / "docs" / "assets").mkdir(parents=True)
+            (root / "packaging" / "windows").mkdir(parents=True)
+            (root / "scripts").mkdir()
+            (root / "src" / "employeurd_megagest" / "assets").mkdir(parents=True)
+
+            (root / "pyproject.toml").write_text(
+                '[project]\nname = "test"\n\n[project.optional-dependencies]\nbuild = ["cx_Freeze>=8"]\n',
+                encoding="utf-8",
+            )
+            (root / "scripts" / "build_exe.ps1").write_text(
+                "python -m cx_Freeze --icon packaging/windows/EmployeurD-MegaGest.ico\n",
+                encoding="utf-8",
+            )
+            (root / "packaging" / "windows" / "EmployeurD-MegaGest.ico").write_bytes(b"ico")
+            (root / "src" / "employeurd_megagest" / "assets" / "app-icon.png").write_bytes(b"png")
+            (root / "docs" / "assets" / "product-icon.png").write_bytes(b"png")
+            (root / ".github" / "workflows" / "release.yml").write_text(
+                "\n".join(
+                    [
+                        "name: test",
+                        "on:",
+                        "  workflow_dispatch:",
+                        "steps:",
+                        "  - run: |",
+                        "      --fail-on-detections",
+                        "      generate_release_manifest.py",
+                        "      .release-manifest.json",
+                        "      append_release_verification.py",
+                        '      "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION-portable.zip"',
+                        "      -portable.exe.sha256",
+                        '      "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.exe"',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (root / "scripts" / "publish_release.ps1").write_text(
+                "\n".join(
+                    [
+                        "generate_release_manifest.py",
+                        ".release-manifest.json",
+                        "append_release_verification.py",
+                        "$CreateGitHubRelease -and $AllowVirusTotalDetections",
+                        "Assert-NoExistingReleaseTarget",
+                        "gh release view $Tag",
+                        'git ls-remote --tags origin "refs/tags/$Tag"',
+                        "Assert-OfficialReleaseMainState",
+                        '$Branch -ne "main"',
+                        "refs/remotes/origin/main",
+                        '"dist/$Name-v$ReleaseVersion.exe"',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            issues = audit_release_readiness._release_policy_issues(root)
+
+        self.assertTrue(any(".github/workflows/release.yml ne doit pas publier de .exe direct" in item for item in issues))
+        self.assertTrue(any("scripts/publish_release.ps1 ne doit pas publier de .exe direct" in item for item in issues))
+
     def test_virustotal_script_writes_local_report_without_api_key(self) -> None:
         root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as directory:
@@ -1043,7 +1234,9 @@ class EmployeurDMegaGestTest(unittest.TestCase):
 
         self.assertIn("Score VirusTotal: `0 malicious / 0 suspicious`", section)
         self.assertIn("Rapport détaillé: `EmployeurD-MegaGest-v9.9.9.virustotal.md`", section)
-        self.assertIn("SHA256 exécutable: `exe-sha`", section)
+        self.assertIn("Paquet publié: `ZIP portable`", section)
+        self.assertIn("SHA256 exécutable inclus: `exe-sha`", section)
+        self.assertNotIn("SmartScreen", section)
         self.assertIn("Données de paie transmises pendant cette vérification: `non`", section)
 
 

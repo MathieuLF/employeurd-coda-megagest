@@ -73,22 +73,11 @@ def show_report_preview(parent: tk.Tk, result: ConversionResult | None) -> None:
 def show_security_window(
     parent: tk.Tk,
     *,
-    update_check_on_startup: bool,
     update_url: str,
-    on_toggle_startup,
 ) -> None:
     dialog = _dialog(parent, "Sécurité", "720x520")
     text = _text_block(dialog, _security_intro_text())
     text.grid(row=0, column=0, sticky="nsew", padx=16, pady=(16, 10))
-
-    check_var = tk.BooleanVar(value=update_check_on_startup)
-    check = ttk.Checkbutton(
-        dialog,
-        text="Vérifier les mises à jour au démarrage",
-        variable=check_var,
-        command=lambda: on_toggle_startup(check_var.get()),
-    )
-    check.grid(row=1, column=0, sticky="w", padx=16, pady=(0, 8))
 
     _button_row(
         dialog,
@@ -97,7 +86,7 @@ def show_security_window(
             ("Ouvrir les logs", lambda: open_folder(default_log_dir())),
             (Text.close, dialog.destroy),
         ],
-        row=2,
+        row=1,
     )
     _load_security_details(dialog, text)
 

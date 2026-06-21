@@ -11,10 +11,11 @@ Il est possible de tester l'application localement avec ses propres fichiers, ma
 ## Avant de proposer un changement
 
 ```powershell
-python -m unittest discover -s tests
-python -m compileall src scripts
-python scripts/audit_release_readiness.py --version 0.1.0
+python -m pip install -e .
+python scripts/agent_validate.py
 ```
+
+Ces commandes ne demandent ni base de données, ni serveur, ni clé secrète. `VT_API_KEY` sert seulement à une publication officielle.
 
 ## À garder en tête
 
