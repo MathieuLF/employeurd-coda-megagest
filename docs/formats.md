@@ -17,7 +17,7 @@ Une ligne contient 77 caractères, sans compter la fin de ligne.
 Exemple synthétique :
 
 ```text
-00001234 50213000140                                          1000.0020260618
+00001234 50213000140                                          2450.0020260618
 ```
 
 ## MND MégaGest

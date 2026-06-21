@@ -94,6 +94,8 @@ $Name = "EmployeurD-MegaGest"
 $PortableExe = "dist/$Name/$Name.exe"
 $PortableZip = "dist/$Name-v$ReleaseVersion-portable.zip"
 $VirusTotalReport = "dist/$Name-v$ReleaseVersion.virustotal.md"
+$PublicReportsDir = "docs/releases"
+$PublicVirusTotalReport = "$PublicReportsDir/$Name-v$ReleaseVersion.virustotal.md"
 
 if ($SubmitVirusTotal) {
     $VtArgs = @(
@@ -135,10 +137,17 @@ if ($SubmitVirusTotal) {
 
     python scripts/append_release_verification.py --version $ReleaseVersion
     Assert-LastExitCode "Ajout du score VirusTotal aux notes de mise en ligne impossible"
+
+    New-Item -ItemType Directory -Force -Path $PublicReportsDir *> $null
+    Copy-Item -LiteralPath $VirusTotalReport -Destination $PublicVirusTotalReport -Force
 }
 
 if ($CommitVersion) {
-    git add CHANGELOG.md pyproject.toml src/employeurd_megagest/version.py
+    $VersionCommitPaths = @("CHANGELOG.md", "pyproject.toml", "src/employeurd_megagest/version.py")
+    if (Test-Path $PublicVirusTotalReport) {
+        $VersionCommitPaths += $PublicVirusTotalReport
+    }
+    git add @VersionCommitPaths
     git commit -m "Préparer EmployeurD-MegaGest v$ReleaseVersion"
     Assert-LastExitCode "Commit de version impossible"
 } else {

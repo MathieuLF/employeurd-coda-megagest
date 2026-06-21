@@ -54,6 +54,16 @@ from scripts import agent_validate, append_release_verification, audit_release_r
 from scripts.submit_virustotal import collect_detections
 
 
+BALANCED_ROW_COUNT = 20
+BALANCED_TOTAL = Decimal("6643.00")
+BALANCED_ACCOUNT_COUNT = 20
+BALANCED_DEBIT_ACCOUNT_COUNT = 10
+BALANCED_CREDIT_ACCOUNT_COUNT = 10
+SPD640_ROW_COUNT = 24
+SPD640_TYPE_G_MONTANTS = Decimal("6200.00")
+SPD640_TYPE_D_MONTANTS = Decimal("4343.00")
+
+
 class EmployeurDMegaGestTest(unittest.TestCase):
     def config(self):
         root = Path(__file__).resolve().parents[1]
@@ -63,10 +73,10 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         entries = parse_employeurd_file(root / "samples" / "employeurd-balanced.txt")
 
-        self.assertEqual(len(entries), 4)
+        self.assertEqual(len(entries), BALANCED_ROW_COUNT)
         self.assertEqual(entries[0].batch, "00001234")
         self.assertEqual(entries[0].account, "50213000140")
-        self.assertEqual(entries[0].amount, Decimal("1000.00"))
+        self.assertEqual(entries[0].amount, Decimal("2450.00"))
         self.assertEqual(entries[0].entry_date.strftime("%Y%m%d"), "20260618")
 
     def test_product_icon_assets_are_present(self) -> None:
@@ -82,8 +92,8 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         entries = parse_employeurd_file(root / "samples" / "employeurd-balanced.txt")
         debit, credit = source_totals(entries)
 
-        self.assertEqual(debit, Decimal("1250.50"))
-        self.assertEqual(credit, Decimal("1250.50"))
+        self.assertEqual(debit, BALANCED_TOTAL)
+        self.assertEqual(credit, BALANCED_TOTAL)
 
     def test_reject_invalid_source_length(self) -> None:
         with self.assertRaises(ValidationFailed):
@@ -112,7 +122,7 @@ class EmployeurDMegaGestTest(unittest.TestCase):
             output = Path(directory) / "output.mnd"
             result = convert_file(root / "samples" / "employeurd-balanced.txt", output, config)
 
-            self.assertEqual(result.row_count, 4)
+            self.assertEqual(result.row_count, BALANCED_ROW_COUNT)
             self.assertEqual(result.total_debit, result.total_credit)
             output_bytes = output.read_bytes()
             self.assertTrue(output_bytes.endswith(b"\r\n"))
@@ -128,9 +138,9 @@ class EmployeurDMegaGestTest(unittest.TestCase):
             self.assertEqual(result.reconciliations[0].status, "success")
             self.assertEqual(payload["reconciliations"][0]["report_type"], "MND")
             self.assertEqual(payload["reconciliations"][0]["debit_difference"], "0.00")
-            self.assertEqual(payload["account_count"], 4)
-            self.assertEqual(payload["debit_account_count"], 2)
-            self.assertEqual(payload["credit_account_count"], 2)
+            self.assertEqual(payload["account_count"], BALANCED_ACCOUNT_COUNT)
+            self.assertEqual(payload["debit_account_count"], BALANCED_DEBIT_ACCOUNT_COUNT)
+            self.assertEqual(payload["credit_account_count"], BALANCED_CREDIT_ACCOUNT_COUNT)
 
     def test_convert_can_skip_optional_report_and_json(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -200,11 +210,11 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         )
 
         self.assertIn("======= Résumé de la génération =======", block)
-        self.assertIn("Débits: 1 250,50 $", block)
-        self.assertIn("Crédits: 1 250,50 $", block)
-        self.assertIn("Comptes uniques: 4", block)
-        self.assertIn("Comptes au débit: 2", block)
-        self.assertIn("Comptes au crédit: 2", block)
+        self.assertIn("Débits: 6 643,00 $", block)
+        self.assertIn("Crédits: 6 643,00 $", block)
+        self.assertIn("Comptes uniques: 20", block)
+        self.assertIn("Comptes au débit: 10", block)
+        self.assertIn("Comptes au crédit: 10", block)
         self.assertIn("Relecture MND: OK", block)
         self.assertIn("Fichiers créés:", block)
         self.assertIn("- output.mnd", block)
@@ -241,9 +251,9 @@ class EmployeurDMegaGestTest(unittest.TestCase):
             entries = parse_mnd_file(output)
             debit, credit = mnd_totals(entries)
 
-            self.assertEqual(len(entries), 4)
-            self.assertEqual(debit, Decimal("1250.50"))
-            self.assertEqual(credit, Decimal("1250.50"))
+            self.assertEqual(len(entries), BALANCED_ROW_COUNT)
+            self.assertEqual(debit, BALANCED_TOTAL)
+            self.assertEqual(credit, BALANCED_TOTAL)
             self.assertEqual(entries[0].period, "202606")
             self.assertEqual(entries[0].reference, "00001234")
             self.assertEqual(entries[0].batch, "001234")
@@ -289,11 +299,11 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         report = parse_spd640_csv(root / "samples" / "OPD_RP_00001234_SPD640-P_SYNTHETIQUE.CSV")
         totals = report.to_payroll_totals()
 
-        self.assertEqual(report.row_count, 3)
+        self.assertEqual(report.row_count, SPD640_ROW_COUNT)
         self.assertEqual(report.batch, "00001234")
         self.assertEqual(report.period, "202606")
-        self.assertEqual(totals.other_totals["type_g_montants"], Decimal("1250.50"))
-        self.assertEqual(totals.other_totals["type_d_montants"], Decimal("100.00"))
+        self.assertEqual(totals.other_totals["type_g_montants"], SPD640_TYPE_G_MONTANTS)
+        self.assertEqual(totals.other_totals["type_d_montants"], SPD640_TYPE_D_MONTANTS)
 
     def test_each_synthetic_txt_has_matching_spd640_csv(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -344,8 +354,8 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         )
 
         self.assertTrue(result.ok)
-        self.assertEqual(result.report_debit, Decimal("1250.50"))
-        self.assertEqual(result.report_credit, Decimal("1250.50"))
+        self.assertEqual(result.report_debit, BALANCED_TOTAL)
+        self.assertEqual(result.report_credit, BALANCED_TOTAL)
 
     def test_reconcile_spd640_detects_difference(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -360,7 +370,7 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         )
 
         self.assertFalse(result.ok)
-        self.assertEqual(result.debit_difference, Decimal("-1240.50"))
+        self.assertEqual(result.debit_difference, Decimal("-6633.00"))
 
     def test_control_report_rejects_non_spd640_file(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -415,7 +425,7 @@ class EmployeurDMegaGestTest(unittest.TestCase):
             summary = summary_text(conversion, [reconciliation])
 
             self.assertEqual(spd640_payload["status"], "success")
-            self.assertIn("SPD640-P: Concordant - totaux comparés débit 1 250,50 $ / crédit 1 250,50 $", summary)
+            self.assertIn("SPD640-P: Concordant - totaux comparés débit 6 643,00 $ / crédit 6 643,00 $", summary)
             self.assertIn("Écart SPD640-P: débit 0,00 $ / crédit 0,00 $", summary)
             self.assertIn("## Rapprochements", markdown)
             self.assertIn("SPD640", markdown)
@@ -839,9 +849,9 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertTrue(state.can_generate)
         metrics = build_metrics(result)
         self.assertTrue(any(metric.label == "Relecture MND" and metric.value == "OK" for metric in metrics))
-        self.assertTrue(any(metric.label == "Comptes uniques" and metric.value == "4" for metric in metrics))
-        self.assertTrue(any(metric.label == "Comptes au débit" and metric.value == "2" for metric in metrics))
-        self.assertTrue(any(metric.label == "Comptes au crédit" and metric.value == "2" for metric in metrics))
+        self.assertTrue(any(metric.label == "Comptes uniques" and metric.value == "20" for metric in metrics))
+        self.assertTrue(any(metric.label == "Comptes au débit" and metric.value == "10" for metric in metrics))
+        self.assertTrue(any(metric.label == "Comptes au crédit" and metric.value == "10" for metric in metrics))
 
     def test_release_scripts_audit_and_extract_changelog(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -894,6 +904,7 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         publish_script = (root / "scripts" / "publish_release.ps1").read_text(encoding="utf-8")
         release_script = (root / "scripts" / "release.ps1").read_text(encoding="utf-8")
+        site_html = (root / "docs" / "index.html").read_text(encoding="utf-8")
         site_js = (root / "docs" / "assets" / "site.js").read_text(encoding="utf-8")
 
         self.assertIn("Préparer une mise en ligne manuelle", workflow)
@@ -913,7 +924,19 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertIn("Aucun ZIP portable disponible pour cette version.", site_js)
         self.assertIn("EmployeurD-MegaGest-v", site_js)
         self.assertIn("-portable\\.zip", site_js)
+        self.assertIn("data-primary-download", site_html)
+        self.assertNotIn("data-release-download", site_html)
+        self.assertIn("primaryDownloadLink.href = packageAsset.browser_download_url", site_js)
+        self.assertNotIn("downloadLink.href = packageAsset.browser_download_url", site_js)
+        self.assertNotIn("Rapport VirusTotal disponible.", site_js)
+        self.assertIn("docs/releases/", site_js)
+        self.assertIn("publicVirusTotalReportUrl(virusTotalAsset)", site_js)
+        self.assertNotIn("virusTotalLink.href = virusTotalAsset.browser_download_url", site_js)
         self.assertNotIn("findAsset(assets, /\\.exe", site_js)
+        self.assertIn("$PublicReportsDir = \"docs/releases\"", publish_script)
+        self.assertIn("Copy-Item -LiteralPath $VirusTotalReport -Destination $PublicVirusTotalReport -Force", publish_script)
+        self.assertIn("if (Test-Path $PublicVirusTotalReport)", publish_script)
+        self.assertIn("git add @VersionCommitPaths", publish_script)
 
     def test_agent_review_environment_is_documented_and_fast_to_setup(self) -> None:
         root = Path(__file__).resolve().parents[1]

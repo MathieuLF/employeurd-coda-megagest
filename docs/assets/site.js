@@ -14,7 +14,7 @@
   const packageTarget = card.querySelector("[data-release-package]");
   const shaTarget = card.querySelector("[data-release-sha]");
   const verificationTarget = card.querySelector("[data-release-verification]");
-  const downloadLink = card.querySelector("[data-release-download]");
+  const primaryDownloadLink = document.querySelector("[data-primary-download]");
   const virusTotalLink = card.querySelector("[data-release-virustotal]");
   const releasePageLink = card.querySelector("[data-release-page]");
   const note = card.querySelector("[data-release-note]");
@@ -25,15 +25,20 @@
     }
   };
 
+  const setHidden = (element, hidden) => {
+    if (element) {
+      element.hidden = hidden;
+    }
+  };
+
   const setUnavailable = (heading, message, noteText) => {
     setText(title, heading);
     setText(summary, message);
     if (details) {
       details.hidden = true;
     }
-    if (downloadLink) {
-      downloadLink.hidden = true;
-      downloadLink.href = releasesUrl;
+    if (primaryDownloadLink) {
+      primaryDownloadLink.href = releasesUrl;
     }
     if (virusTotalLink) {
       virusTotalLink.hidden = true;
@@ -69,6 +74,15 @@
   };
 
   const findVirusTotal = (assets) => findAsset(assets, /virustotal.*\.md$/i);
+
+  const githubBlobUrl = (branch, path) => {
+    const encodedBranch = encodeURIComponent(branch);
+    const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+    return `https://github.com/${repo}/blob/${encodedBranch}/${encodedPath}`;
+  };
+
+  const publicVirusTotalReportUrl = (asset) =>
+    asset && asset.name ? githubBlobUrl("main", `docs/releases/${asset.name}`) : releasesUrl;
 
   const shaFromAssetDigest = (asset) => {
     const digest = asset && asset.digest ? String(asset.digest) : "";
@@ -153,15 +167,13 @@
 
     if (packageAsset) {
       setText(packageTarget, packageAsset.name);
-      if (downloadLink) {
-        downloadLink.href = packageAsset.browser_download_url;
-        downloadLink.textContent = "Télécharger le ZIP";
-        downloadLink.hidden = false;
+      if (primaryDownloadLink) {
+        primaryDownloadLink.href = packageAsset.browser_download_url;
       }
     } else {
       setText(packageTarget, "Aucun ZIP portable disponible pour cette version.");
-      if (downloadLink) {
-        downloadLink.hidden = true;
+      if (primaryDownloadLink) {
+        primaryDownloadLink.href = releaseUrl;
       }
     }
 
@@ -169,13 +181,15 @@
     setText(shaTarget, shaValue || "Non publiée avec cette mise en ligne.");
 
     if (virusTotalAsset) {
-      setText(verificationTarget, "Rapport VirusTotal disponible.");
+      setText(verificationTarget, "");
+      setHidden(verificationTarget, true);
       if (virusTotalLink) {
-        virusTotalLink.href = virusTotalAsset.browser_download_url;
+        virusTotalLink.href = publicVirusTotalReportUrl(virusTotalAsset);
         virusTotalLink.textContent = "Rapport VirusTotal";
         virusTotalLink.hidden = false;
       }
     } else {
+      setHidden(verificationTarget, false);
       setText(verificationTarget, "Rapport VirusTotal non joint à cette mise en ligne.");
       if (virusTotalLink) {
         virusTotalLink.hidden = true;
