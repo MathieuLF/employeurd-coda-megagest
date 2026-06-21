@@ -957,6 +957,18 @@ class EmployeurDMegaGestTest(unittest.TestCase):
             commands,
         )
 
+    def test_python_version_policy_is_312_only(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
+        ci = (root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        agents = (root / "AGENTS.md").read_text(encoding="utf-8")
+
+        self.assertIn('requires-python = ">=3.12"', pyproject)
+        self.assertIn('python-version: "3.12"', ci)
+        self.assertNotIn("matrix:", ci)
+        self.assertNotIn("3.11", ci)
+        self.assertIn("Python 3.12", agents)
+
     def test_release_audit_flags_direct_exe_assets(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

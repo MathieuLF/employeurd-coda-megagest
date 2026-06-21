@@ -2,7 +2,7 @@
 
 ## Environnement rapide
 
-- Python 3.11 ou plus récent suffit pour les tests et les revues de code.
+- Python 3.12 ou plus récent suffit pour les tests et les revues de code.
 - Aucune base de données, aucun serveur et aucune clé secrète ne sont requis pour la validation courante.
 - `VT_API_KEY` sert seulement à une publication officielle avec VirusTotal; ne pas l'exiger pour une revue.
 - Les fichiers de test dans `samples/` sont synthétiques. Ne jamais ajouter de fichier de paie réel, SPD réel, MND réel ou secret.
