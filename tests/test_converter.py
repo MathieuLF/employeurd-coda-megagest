@@ -756,6 +756,28 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertTrue(result.release_url.endswith("/releases/tags/v0.1.0"))
         self.assertEqual(fetch_json.call_args.kwargs["timeout"], DEFAULT_TIMEOUT_SECONDS)
 
+    def test_windows_signature_status_passes_path_as_powershell_argument(self) -> None:
+        malicious_paths = (
+            Path(r"C:\Users\victim\bad'$(Write-Output PWNED)\EmployeurD-MegaGest.exe"),
+            Path("C:/Users/Public/ED'$(Start-Process calc)/EmployeurD-MegaGest.exe"),
+        )
+
+        for malicious_path in malicious_paths:
+            with self.subTest(path=str(malicious_path)):
+                with (
+                    patch("employeurd_megagest.integrity.sys.platform", "win32"),
+                    patch("employeurd_megagest.integrity.subprocess.run") as run,
+                ):
+                    run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="Valid\n", stderr="")
+
+                    result = signature_status(malicious_path)
+
+                command = run.call_args.args[0]
+                self.assertEqual(result, "Valid")
+                self.assertEqual(command[-1], str(malicious_path))
+                self.assertNotIn(str(malicious_path), command[3])
+                self.assertIn("$args[0]", command[3])
+
     def test_package_integrity_hash_changes_when_package_changes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -770,23 +792,6 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertIsNotNone(first)
         self.assertIsNotNone(second)
         self.assertNotEqual(first, second)
-
-    def test_signature_status_passes_path_through_environment(self) -> None:
-        executable = Path("C:/Users/Public/ED'$(Start-Process calc)/EmployeurD-MegaGest.exe")
-
-        with (
-            patch("employeurd_megagest.integrity.sys.platform", "win32"),
-            patch("employeurd_megagest.integrity.subprocess.run") as run,
-        ):
-            run.return_value.stdout = "Valid\n"
-
-            status = signature_status(executable)
-
-        self.assertEqual(status, "Valid")
-        command = run.call_args.args[0]
-        self.assertEqual(command[3], "$path = $env:EMPLOYEURD_SIGNATURE_PATH; (Get-AuthenticodeSignature -LiteralPath $path).Status")
-        self.assertNotIn(str(executable), command[3])
-        self.assertEqual(run.call_args.kwargs["env"]["EMPLOYEURD_SIGNATURE_PATH"], str(executable))
 
     def test_preferences_default_blank_and_persist_output_dir(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
