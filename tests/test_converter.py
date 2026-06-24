@@ -239,6 +239,7 @@ class EmployeurDMegaGestTest(unittest.TestCase):
 
         self.assertIn("self.after(750, lambda: self._check_update(silent=True))", source)
         self.assertNotIn("if self.preferences.update_check_on_startup:", source)
+        self.assertIn("if silent and resolved_url != DEFAULT_UPDATE_URL:", source)
         self.assertIn('self.update_button = ttk.Button(links, text=Text.check_updates, command=lambda: self._check_update(silent=False)', source)
 
     def test_parse_generated_mnd_and_roundtrip_totals(self) -> None:
