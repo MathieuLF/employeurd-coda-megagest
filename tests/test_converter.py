@@ -234,12 +234,13 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertIn("GitHub", SECURITY_TOOLTIP_TEXT)
         self.assertNotIn("VirusTotal", SECURITY_TOOLTIP_TEXT)
 
-    def test_gui_gates_silent_update_check_with_startup_preference(self) -> None:
+    def test_gui_gates_silent_update_check_with_startup_preference_and_default_channel(self) -> None:
         source = (Path(__file__).resolve().parents[1] / "src" / "employeurd_megagest" / "app_gui.py").read_text(encoding="utf-8")
 
         self.assertIn('default_update_check_on_startup=self.app_config.updates.get("check_on_startup") is True', source)
         self.assertIn("if self.preferences.update_check_on_startup:", source)
         self.assertIn("self.after(750, lambda: self._check_update(silent=True))", source)
+        self.assertIn("if silent and resolved_url != DEFAULT_UPDATE_URL:", source)
         self.assertIn('self.update_button = ttk.Button(links, text=Text.check_updates, command=lambda: self._check_update(silent=False)', source)
 
     def test_parse_generated_mnd_and_roundtrip_totals(self) -> None:
@@ -758,20 +759,26 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertEqual(fetch_json.call_args.kwargs["timeout"], DEFAULT_TIMEOUT_SECONDS)
 
     def test_windows_signature_status_passes_path_as_powershell_argument(self) -> None:
-        malicious_path = Path(r"C:\Users\victim\bad'$(Write-Output PWNED)\EmployeurD-MegaGest.exe")
-        with (
-            patch("employeurd_megagest.integrity.sys.platform", "win32"),
-            patch("employeurd_megagest.integrity.subprocess.run") as run,
-        ):
-            run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="Valid\n", stderr="")
+        malicious_paths = (
+            Path(r"C:\Users\victim\bad'$(Write-Output PWNED)\EmployeurD-MegaGest.exe"),
+            Path("C:/Users/Public/ED'$(Start-Process calc)/EmployeurD-MegaGest.exe"),
+        )
 
-            result = signature_status(malicious_path)
+        for malicious_path in malicious_paths:
+            with self.subTest(path=str(malicious_path)):
+                with (
+                    patch("employeurd_megagest.integrity.sys.platform", "win32"),
+                    patch("employeurd_megagest.integrity.subprocess.run") as run,
+                ):
+                    run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="Valid\n", stderr="")
 
-        command = run.call_args.args[0]
-        self.assertEqual(result, "Valid")
-        self.assertEqual(command[-1], str(malicious_path))
-        self.assertNotIn(str(malicious_path), command[3])
-        self.assertIn("$args[0]", command[3])
+                    result = signature_status(malicious_path)
+
+                command = run.call_args.args[0]
+                self.assertEqual(result, "Valid")
+                self.assertEqual(command[-1], str(malicious_path))
+                self.assertNotIn(str(malicious_path), command[3])
+                self.assertIn("$args[0]", command[3])
 
     def test_package_integrity_hash_changes_when_package_changes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -878,6 +885,43 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertTrue(any(metric.label == "Comptes uniques" and metric.value == "20" for metric in metrics))
         self.assertTrue(any(metric.label == "Comptes au débit" and metric.value == "10" for metric in metrics))
         self.assertTrue(any(metric.label == "Comptes au crédit" and metric.value == "10" for metric in metrics))
+
+
+    def test_release_audit_allows_only_exact_env_example_tracked_file(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with patch.object(
+            audit_release_readiness,
+            "_run_git",
+            return_value=SimpleNamespace(returncode=0, stdout=".env.example\n"),
+        ):
+            self.assertEqual(audit_release_readiness._tracked_file_issues(root), [])
+
+    def test_release_audit_blocks_sensitive_example_suffix_tracked_files(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        tracked_files = "\n".join(
+            [
+                ".env.prod.example",
+                "outputs/payroll.mnd.example",
+                "logs/audit.example",
+                "dist/private.pem.example",
+            ]
+        )
+        with patch.object(
+            audit_release_readiness,
+            "_run_git",
+            return_value=SimpleNamespace(returncode=0, stdout=f"{tracked_files}\n"),
+        ):
+            issues = audit_release_readiness._tracked_file_issues(root)
+
+        self.assertEqual(
+            issues,
+            [
+                "Fichier sensible ou généré suivi par Git: .env.prod.example",
+                "Fichier sensible ou généré suivi par Git: outputs/payroll.mnd.example",
+                "Fichier sensible ou généré suivi par Git: logs/audit.example",
+                "Fichier sensible ou généré suivi par Git: dist/private.pem.example",
+            ],
+        )
 
     def test_release_scripts_audit_and_extract_changelog(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -1176,6 +1220,11 @@ class EmployeurDMegaGestTest(unittest.TestCase):
                 f"{zip_sha}  EmployeurD-MegaGest-v9.9.9-portable.zip\n",
                 encoding="ascii",
             )
+            package_sha = "a" * 64
+            (dist / "EmployeurD-MegaGest-v9.9.9.package.sha256").write_text(
+                f"{package_sha}  EmployeurD-MegaGest-v9.9.9-package\n",
+                encoding="ascii",
+            )
             (dist / "EmployeurD-MegaGest-v9.9.9.virustotal.md").write_text(
                 "\n".join(
                     [
@@ -1209,6 +1258,11 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertEqual(manifest["artifacts"][0]["sha256"], zip_sha)
         self.assertEqual(manifest["artifacts"][1]["sha256"], exe_sha)
+        self.assertEqual(manifest["package_sha256"], package_sha)
+        self.assertIn(
+            {"name": "EmployeurD-MegaGest-v9.9.9.package.sha256", "type": "package_sha256", "sha256": package_sha},
+            manifest["artifacts"],
+        )
         self.assertFalse(manifest["privacy"]["payroll_files_submitted"])
 
     def test_release_manifest_blocks_virustotal_detections(self) -> None:
@@ -1226,6 +1280,7 @@ class EmployeurDMegaGestTest(unittest.TestCase):
             zip_sha = generate_release_manifest.sha256_file(portable)
             (dist / "EmployeurD-MegaGest-v9.9.9-portable.exe.sha256").write_text(f"{exe_sha}\n", encoding="ascii")
             (dist / "EmployeurD-MegaGest-v9.9.9-portable.zip.sha256").write_text(f"{zip_sha}\n", encoding="ascii")
+            (dist / "EmployeurD-MegaGest-v9.9.9.package.sha256").write_text(f"{'a' * 64}\n", encoding="ascii")
             (dist / "EmployeurD-MegaGest-v9.9.9.virustotal.md").write_text(
                 "- malicious : 1\n- suspicious : 0\n",
                 encoding="utf-8",

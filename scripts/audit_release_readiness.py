@@ -179,6 +179,8 @@ def _release_policy_issues(root: Path) -> list[str]:
         issues.append(".github/workflows/release.yml doit publier le ZIP portable comme asset principal.")
     if "-portable.exe.sha256" not in release_workflow:
         issues.append(".github/workflows/release.yml doit publier l'empreinte de l'exécutable contenu dans le ZIP.")
+    if ".package.sha256" not in release_workflow:
+        issues.append(".github/workflows/release.yml doit publier l'empreinte du paquet applicatif complet.")
     if "generate_release_manifest.py" not in release_workflow or ".release-manifest.json" not in release_workflow:
         issues.append(".github/workflows/release.yml doit générer et publier le manifeste de mise en ligne.")
     if "append_release_verification.py" not in release_workflow:
@@ -189,6 +191,8 @@ def _release_policy_issues(root: Path) -> list[str]:
     publish_script = (root / "scripts" / "publish_release.ps1").read_text(encoding="utf-8")
     if "generate_release_manifest.py" not in publish_script or ".release-manifest.json" not in publish_script:
         issues.append("scripts/publish_release.ps1 doit générer et joindre le manifeste de mise en ligne.")
+    if ".package.sha256" not in publish_script:
+        issues.append("scripts/publish_release.ps1 doit joindre l'empreinte du paquet applicatif complet.")
     if "append_release_verification.py" not in publish_script:
         issues.append("scripts/publish_release.ps1 doit afficher le score VirusTotal dans les notes de mise en ligne.")
     if "$CreateGitHubRelease -and $AllowVirusTotalDetections" not in publish_script:
@@ -214,7 +218,7 @@ def _tracked_file_issues(root: Path) -> list[str]:
     issues = []
     for raw_path in completed.stdout.splitlines():
         normalized = raw_path.replace("\\", "/")
-        if normalized == ".env.example" or normalized.endswith(".example"):
+        if normalized == ".env.example":
             continue
         if any(pattern.search(normalized) for pattern in BLOCKED_TRACKED_PATTERNS):
             issues.append(f"Fichier sensible ou généré suivi par Git: {raw_path}")
