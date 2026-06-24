@@ -19,6 +19,9 @@ class Palette:
     primary_hover = "#115ea3"
     primary_pressed = "#0f548c"
     primary_dark = "#0b4a7a"
+    sponsor = "#bf3989"
+    sponsor_hover = "#a53178"
+    sponsor_pressed = "#83245f"
     success = "#107c10"
     success_bg = "#f1faf1"
     warning = "#8a5a00"
@@ -102,6 +105,17 @@ def configure_theme(root: tk.Tk) -> None:
         focusthickness=1,
         focuscolor=Palette.focus,
     )
+    style.configure(
+        "Sponsor.TButton",
+        padding=(12, 7),
+        background=Palette.sponsor,
+        foreground="#ffffff",
+        bordercolor=Palette.sponsor,
+        lightcolor=Palette.sponsor,
+        darkcolor=Palette.sponsor,
+        focusthickness=1,
+        focuscolor=Palette.focus,
+    )
     style.map(
         "Primary.TButton",
         background=[
@@ -123,6 +137,17 @@ def configure_theme(root: tk.Tk) -> None:
         "Quiet.TButton",
         background=[("disabled", Palette.disabled_bg), ("pressed", "#ededed"), ("active", "#f7f7f7"), ("!disabled", Palette.surface_alt)],
         foreground=[("disabled", Palette.disabled), ("!disabled", Palette.text)],
+    )
+    style.map(
+        "Sponsor.TButton",
+        background=[
+            ("disabled", Palette.disabled_bg),
+            ("pressed", Palette.sponsor_pressed),
+            ("active", Palette.sponsor_hover),
+            ("!disabled", Palette.sponsor),
+        ],
+        foreground=[("disabled", Palette.disabled), ("!disabled", "#ffffff")],
+        bordercolor=[("disabled", Palette.disabled_bg), ("!disabled", Palette.sponsor)],
     )
     style.configure(
         "TEntry",

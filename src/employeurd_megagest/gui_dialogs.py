@@ -8,7 +8,7 @@ from tkinter import ttk
 
 from .audit_log import default_log_dir
 from .gui_state import summary_text
-from .gui_texts import LEGAL_NOTICE_TEXT, SECURITY_NOTICE_TEXT, SUPPORT_EMAIL, SUPPORT_ISSUE_URL, Text
+from .gui_texts import LEGAL_NOTICE_TEXT, SECURITY_NOTICE_TEXT, SPONSOR_LINK_TEXT, SPONSOR_URL, SUPPORT_EMAIL, SUPPORT_ISSUE_URL, Text
 from .integrity import IntegrityCheckResult, check_running_app_integrity, local_integrity_details
 from .models import ConversionResult
 from .platform_actions import open_folder, open_path
@@ -22,13 +22,18 @@ def show_legal_notice(parent: tk.Tk) -> None:
 
 
 def show_support_window(parent: tk.Tk) -> None:
-    dialog = _dialog(parent, "Support", "680x420")
+    dialog = _dialog(parent, "Support", "700x460")
     content = "\n".join(
         [
             "Besoin d'aide?",
             "=============",
             "",
             "Pour une question, un problème ou une amélioration, ouvrez de préférence un billet GitHub.",
+            "",
+            "Soutenir le projet",
+            "==================",
+            "",
+            "Le bouton Sponsor GitHub ouvre la page officielle de soutien du projet.",
             "",
             f"Courriel : {SUPPORT_EMAIL}",
             "",
@@ -46,6 +51,7 @@ def show_support_window(parent: tk.Tk) -> None:
         dialog,
         [
             ("Ouvrir un billet GitHub", lambda: webbrowser.open(SUPPORT_ISSUE_URL)),
+            (SPONSOR_LINK_TEXT, lambda: webbrowser.open(SPONSOR_URL)),
             ("Écrire un courriel", lambda: webbrowser.open(f"mailto:{SUPPORT_EMAIL}")),
             (Text.close, dialog.destroy),
         ],

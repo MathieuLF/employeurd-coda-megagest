@@ -974,6 +974,9 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         publish_script = (root / "scripts" / "publish_release.ps1").read_text(encoding="utf-8")
         release_script = (root / "scripts" / "release.ps1").read_text(encoding="utf-8")
+        readme = (root / "README.md").read_text(encoding="utf-8")
+        security = (root / "SECURITY.md").read_text(encoding="utf-8")
+        user_guide = (root / "docs" / "guide_utilisateur.md").read_text(encoding="utf-8")
         site_html = (root / "docs" / "index.html").read_text(encoding="utf-8")
         site_js = (root / "docs" / "assets" / "site.js").read_text(encoding="utf-8")
 
@@ -1007,6 +1010,34 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertIn("Copy-Item -LiteralPath $VirusTotalReport -Destination $PublicVirusTotalReport -Force", publish_script)
         self.assertIn("if (Test-Path $PublicVirusTotalReport)", publish_script)
         self.assertIn("git add @VersionCommitPaths", publish_script)
+        for document in (readme, security, user_guide, site_html):
+            self.assertIn("SmartScreen", document)
+            self.assertIn("Exécuter quand même", document)
+            self.assertIn("signée numériquement", document)
+
+    def test_github_sponsor_link_is_exposed_in_app_and_public_docs(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        sponsor_url = "https://github.com/sponsors/MathieuLF"
+        funding = (root / ".github" / "FUNDING.yml").read_text(encoding="utf-8")
+        app_gui = (root / "src" / "employeurd_megagest" / "app_gui.py").read_text(encoding="utf-8")
+        gui_dialogs = (root / "src" / "employeurd_megagest" / "gui_dialogs.py").read_text(encoding="utf-8")
+        gui_texts = (root / "src" / "employeurd_megagest" / "gui_texts.py").read_text(encoding="utf-8")
+        gui_theme = (root / "src" / "employeurd_megagest" / "gui_theme.py").read_text(encoding="utf-8")
+        readme = (root / "README.md").read_text(encoding="utf-8")
+        site_html = (root / "docs" / "index.html").read_text(encoding="utf-8")
+        site_css = (root / "docs" / "assets" / "site.css").read_text(encoding="utf-8")
+
+        self.assertIn("github: MathieuLF", funding)
+        self.assertIn(f'SPONSOR_URL = "{sponsor_url}"', gui_texts)
+        self.assertIn('SPONSOR_LINK_TEXT = "Sponsor GitHub"', gui_texts)
+        self.assertIn("Sponsor.TButton", app_gui)
+        self.assertIn("Sponsor.TButton", gui_theme)
+        self.assertIn("webbrowser.open(SPONSOR_URL)", app_gui)
+        self.assertIn("webbrowser.open(SPONSOR_URL)", gui_dialogs)
+        for document in (readme, site_html):
+            self.assertIn(sponsor_url, document)
+            self.assertIn("Sponsor GitHub", document)
+        self.assertIn(".button.sponsor", site_css)
 
     def test_agent_review_environment_is_documented_and_fast_to_setup(self) -> None:
         root = Path(__file__).resolve().parents[1]
