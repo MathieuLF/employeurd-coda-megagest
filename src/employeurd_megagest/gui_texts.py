@@ -6,10 +6,12 @@ APP_SUBTITLE = "Ajoutez l'écriture de paie, confirmez les soldes au besoin, pui
 COPYRIGHT_TEXT = "© 2026 Mathieu Lapointe-Fiset"
 WEBSITE_URL = "https://mathieu.pro"
 REPOSITORY_URL = "https://github.com/MathieuLF/employeurd-coda-megagest"
+SPONSOR_URL = "https://github.com/sponsors/MathieuLF"
 SUPPORT_EMAIL = "services@mathieu.pro"
 SUPPORT_ISSUE_URL = "https://github.com/MathieuLF/employeurd-coda-megagest/issues/new/choose"
 WEBSITE_LINK_TEXT = "Mathieu.PRO"
 REPOSITORY_LINK_TEXT = "Dépôt GitHub"
+SPONSOR_LINK_TEXT = "Sponsor GitHub"
 
 LEGAL_NOTICE_TEXT = (
     "EmployeurD, PG Solutions, MégaGest et les autres noms de produits ou de sociétés cités "

@@ -6,6 +6,10 @@
 
 ![Aperçu de l'application](docs/assets/screenshots/v0.1.0/app-main.png)
 
+<p align="center">
+  <a href="https://github.com/sponsors/MathieuLF"><strong>Sponsor GitHub</strong></a>
+</p>
+
 ## En bref
 
 EmployeurD-MegaGest est un utilitaire Windows qui prépare un fichier `.mnd` pour MégaGest à partir d'une écriture détaillée EmployeurD au format TXT.
@@ -21,6 +25,12 @@ Un rapport SPD640-P CSV peut être ajouté au besoin pour confirmer les totaux d
 5. Ajouter le rapport SPD640-P CSV au besoin.
 6. Vérifier la paie, puis créer le MND si tout est conforme.
 
+### Première ouverture sur Windows
+
+Windows SmartScreen peut afficher un avertissement de sécurité au premier lancement. C'est attendu : l'application est publique et vérifiable, mais elle n'est pas signée numériquement.
+
+Si le fichier provient bien de la page officielle GitHub Releases, cliquez sur `Informations complémentaires`, puis sur `Exécuter quand même`.
+
 ## Pages utiles
 
 - [Site de présentation](https://mathieulf.github.io/employeurd-coda-megagest/)
@@ -28,6 +38,7 @@ Un rapport SPD640-P CSV peut être ajouté au besoin pour confirmer les totaux d
 - [Formats des fichiers](docs/formats.md)
 - [Sécurité](SECURITY.md)
 - [Support](SUPPORT.md)
+- [Sponsor GitHub](https://github.com/sponsors/MathieuLF)
 - [Mentions légales](docs/mentions_legales.md)
 - [Licence MIT](LICENSE)
 

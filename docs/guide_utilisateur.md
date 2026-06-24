@@ -11,4 +11,6 @@
 
 Sans dossier de sortie choisi, l'application utilise Documents et crée un dossier horodaté.
 
+Au premier lancement, Windows SmartScreen peut afficher un avertissement parce que l'application n'est pas signée numériquement. Si le ZIP vient bien de GitHub Releases, cliquez sur `Informations complémentaires`, puis sur `Exécuter quand même`.
+
 Ne joignez jamais de fichier de paie réel à un billet public.

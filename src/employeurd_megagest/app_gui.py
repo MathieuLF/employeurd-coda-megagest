@@ -28,6 +28,8 @@ from .gui_texts import (
     COPYRIGHT_TEXT,
     REPOSITORY_LINK_TEXT,
     REPOSITORY_URL,
+    SPONSOR_LINK_TEXT,
+    SPONSOR_URL,
     Text,
     WEBSITE_LINK_TEXT,
     WEBSITE_URL,
@@ -712,10 +714,11 @@ class EmployeurDMegaGestApp(tk.Tk):
         _link_label(links, Text.legal, lambda: show_legal_notice(self)).grid(row=0, column=0, padx=(0, 12))
         _link_label(links, WEBSITE_LINK_TEXT, lambda: webbrowser.open(WEBSITE_URL)).grid(row=0, column=1, padx=(0, 12))
         _link_label(links, REPOSITORY_LINK_TEXT, lambda: webbrowser.open(REPOSITORY_URL)).grid(row=0, column=2, padx=(0, 12))
-        _link_label(links, Text.security, self._show_security).grid(row=0, column=3, padx=(0, 12))
-        _link_label(links, Text.support, self._show_support).grid(row=0, column=4, padx=(0, 12))
+        ttk.Button(links, text=SPONSOR_LINK_TEXT, command=lambda: webbrowser.open(SPONSOR_URL), style="Sponsor.TButton").grid(row=0, column=3, padx=(0, 12))
+        _link_label(links, Text.security, self._show_security).grid(row=0, column=4, padx=(0, 12))
+        _link_label(links, Text.support, self._show_support).grid(row=0, column=5, padx=(0, 12))
         self.update_button = ttk.Button(links, text=Text.check_updates, command=lambda: self._check_update(silent=False), style="Quiet.TButton")
-        self.update_button.grid(row=0, column=5)
+        self.update_button.grid(row=0, column=6)
         return footer
 
     def _bind_shortcuts(self) -> None:

@@ -4,6 +4,16 @@ Toutes les versions officielles publiées sur GitHub doivent reprendre la sectio
 
 ## [Non publié]
 
+## [0.1.3] - 2026-06-24
+
+- Corrige la vérification de signature Windows pour éviter l'interpolation de chemins dans PowerShell lors du contrôle Authenticode.
+- Respecte la préférence de vérification de mise à jour au démarrage et ignore les vérifications silencieuses vers un canal personnalisé.
+- Publie et vérifie l'empreinte SHA256 du paquet applicatif complet avec le manifeste de mise en ligne.
+- Durcit l'audit de mise en ligne pour limiter l'exception de fichiers d'exemple suivis à `.env.example` seulement.
+- Ajoute des instructions de première ouverture Windows pour expliquer SmartScreen et l'absence de signature numérique.
+- Ajoute le bouton officiel Sponsor GitHub dans l'application, le README et le microsite.
+- Raffine les exemples synthétiques, la documentation des échantillons et la présentation publique des téléchargements.
+
 ## [0.1.2] - 2026-06-21
 
 - Mise en ligne officielle recentrée sur le ZIP portable, avec garde-fous contre les doublons de release et les assets .exe directs.
