@@ -436,12 +436,15 @@ class EmployeurDMegaGestApp(tk.Tk):
         self._set_initial_geometry()
         self._set_product_icon()
 
+        self.app_config = load_app_config(default_config_dir())
         self.controller = GuiController(config_dir=default_config_dir())
         try:
             ensure_preferences_dir()
         except OSError:
             pass
-        self.preferences = load_preferences()
+        self.preferences = load_preferences(
+            default_update_check_on_startup=self.app_config.updates.get("check_on_startup") is True
+        )
         self.source_path = tk.StringVar()
         self.spd640_path = tk.StringVar()
         self.output_dir = tk.StringVar(value=_usable_saved_output_dir(self.preferences.output_dir))
@@ -466,7 +469,8 @@ class EmployeurDMegaGestApp(tk.Tk):
         self._bind_shortcuts()
         self._refresh_all()
 
-        self.after(750, lambda: self._check_update(silent=True))
+        if self.preferences.update_check_on_startup:
+            self.after(750, lambda: self._check_update(silent=True))
 
     def _set_product_icon(self) -> None:
         icon_paths = [
@@ -894,10 +898,9 @@ class EmployeurDMegaGestApp(tk.Tk):
             open_folder(output)
 
     def _show_security(self) -> None:
-        config = load_app_config(default_config_dir())
         show_security_window(
             self,
-            update_url=str(config.updates.get("url", "")),
+            update_url=str(self.app_config.updates.get("url", "")),
         )
 
     def _show_support(self) -> None:

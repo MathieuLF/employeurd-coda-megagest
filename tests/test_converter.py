@@ -234,11 +234,12 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertIn("GitHub", SECURITY_TOOLTIP_TEXT)
         self.assertNotIn("VirusTotal", SECURITY_TOOLTIP_TEXT)
 
-    def test_gui_starts_silent_update_check_without_startup_preference(self) -> None:
+    def test_gui_gates_silent_update_check_with_startup_preference(self) -> None:
         source = (Path(__file__).resolve().parents[1] / "src" / "employeurd_megagest" / "app_gui.py").read_text(encoding="utf-8")
 
+        self.assertIn('default_update_check_on_startup=self.app_config.updates.get("check_on_startup") is True', source)
+        self.assertIn("if self.preferences.update_check_on_startup:", source)
         self.assertIn("self.after(750, lambda: self._check_update(silent=True))", source)
-        self.assertNotIn("if self.preferences.update_check_on_startup:", source)
         self.assertIn('self.update_button = ttk.Button(links, text=Text.check_updates, command=lambda: self._check_update(silent=False)', source)
 
     def test_parse_generated_mnd_and_roundtrip_totals(self) -> None:
