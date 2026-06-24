@@ -37,7 +37,7 @@ from .models import ConversionResult, ReconciliationResult
 from .platform_actions import open_folder
 from .preferences import ensure_preferences_dir, load_preferences, remember_output_dir
 from .resource_paths import default_config_dir, package_asset_path
-from .update_check import DEFAULT_TIMEOUT_SECONDS, UpdateCheckResult, check_for_update, configured_update_url
+from .update_check import DEFAULT_TIMEOUT_SECONDS, DEFAULT_UPDATE_URL, UpdateCheckResult, check_for_update, configured_update_url
 from .user_messages import friendly_error_message, technical_error_message
 from .version import __version__
 
@@ -911,6 +911,11 @@ class EmployeurDMegaGestApp(tk.Tk):
         config = load_app_config(default_config_dir())
         update_url = str(config.updates.get("url", ""))
         resolved_url = configured_update_url(update_url)
+        if silent and resolved_url != DEFAULT_UPDATE_URL:
+            self._log_event("Vérification automatique ignorée: canal de mise à jour personnalisé.")
+            self.last_update_result = None
+            self._refresh_update_badge()
+            return
         deadline = time.monotonic() + UPDATE_CHECK_UI_DEADLINE_SECONDS
         self.update_check_running = True
         self._log_event("Vérification de version en arrière-plan." if silent else "Vérification manuelle de la version en cours.")
