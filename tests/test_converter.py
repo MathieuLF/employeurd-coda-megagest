@@ -31,7 +31,7 @@ from employeurd_megagest.app_gui import (
 )
 from employeurd_megagest.gui_controller import GuiController, GuiOperationResult
 from employeurd_megagest.gui_state import GuiViewState, build_file_preview, build_metrics, build_output_preview, default_output_root, summary_text
-from employeurd_megagest.integrity import IntegrityCheckResult, app_package_sha256, check_running_app_integrity
+from employeurd_megagest.integrity import IntegrityCheckResult, app_package_sha256, check_running_app_integrity, signature_status
 from employeurd_megagest.output_plan import build_output_plan
 from employeurd_megagest.parser_employeurd import parse_employeurd_file, parse_employeurd_line
 from employeurd_megagest.parser_mnd import parse_mnd_file, parse_mnd_text
@@ -770,6 +770,23 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertIsNotNone(first)
         self.assertIsNotNone(second)
         self.assertNotEqual(first, second)
+
+    def test_signature_status_passes_path_through_environment(self) -> None:
+        executable = Path("C:/Users/Public/ED'$(Start-Process calc)/EmployeurD-MegaGest.exe")
+
+        with (
+            patch("employeurd_megagest.integrity.sys.platform", "win32"),
+            patch("employeurd_megagest.integrity.subprocess.run") as run,
+        ):
+            run.return_value.stdout = "Valid\n"
+
+            status = signature_status(executable)
+
+        self.assertEqual(status, "Valid")
+        command = run.call_args.args[0]
+        self.assertEqual(command[3], "$path = $env:EMPLOYEURD_SIGNATURE_PATH; (Get-AuthenticodeSignature -LiteralPath $path).Status")
+        self.assertNotIn(str(executable), command[3])
+        self.assertEqual(run.call_args.kwargs["env"]["EMPLOYEURD_SIGNATURE_PATH"], str(executable))
 
     def test_preferences_default_blank_and_persist_output_dir(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import subprocess
 import sys
 import urllib.error
@@ -199,10 +200,11 @@ def signature_status(path: Path) -> str:
                 "powershell",
                 "-NoProfile",
                 "-Command",
-                f"(Get-AuthenticodeSignature -LiteralPath {str(path)!r}).Status",
+                "$path = $env:EMPLOYEURD_SIGNATURE_PATH; (Get-AuthenticodeSignature -LiteralPath $path).Status",
             ],
             capture_output=True,
             text=True,
+            env={**os.environ, "EMPLOYEURD_SIGNATURE_PATH": str(path)},
             timeout=SIGNATURE_TIMEOUT_SECONDS,
             check=False,
         )
