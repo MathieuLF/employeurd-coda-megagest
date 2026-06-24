@@ -878,6 +878,43 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertTrue(any(metric.label == "Comptes au débit" and metric.value == "10" for metric in metrics))
         self.assertTrue(any(metric.label == "Comptes au crédit" and metric.value == "10" for metric in metrics))
 
+
+    def test_release_audit_allows_only_exact_env_example_tracked_file(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with patch.object(
+            audit_release_readiness,
+            "_run_git",
+            return_value=SimpleNamespace(returncode=0, stdout=".env.example\n"),
+        ):
+            self.assertEqual(audit_release_readiness._tracked_file_issues(root), [])
+
+    def test_release_audit_blocks_sensitive_example_suffix_tracked_files(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        tracked_files = "\n".join(
+            [
+                ".env.prod.example",
+                "outputs/payroll.mnd.example",
+                "logs/audit.example",
+                "dist/private.pem.example",
+            ]
+        )
+        with patch.object(
+            audit_release_readiness,
+            "_run_git",
+            return_value=SimpleNamespace(returncode=0, stdout=f"{tracked_files}\n"),
+        ):
+            issues = audit_release_readiness._tracked_file_issues(root)
+
+        self.assertEqual(
+            issues,
+            [
+                "Fichier sensible ou généré suivi par Git: .env.prod.example",
+                "Fichier sensible ou généré suivi par Git: outputs/payroll.mnd.example",
+                "Fichier sensible ou généré suivi par Git: logs/audit.example",
+                "Fichier sensible ou généré suivi par Git: dist/private.pem.example",
+            ],
+        )
+
     def test_release_scripts_audit_and_extract_changelog(self) -> None:
         root = Path(__file__).resolve().parents[1]
         audit = subprocess.run(
