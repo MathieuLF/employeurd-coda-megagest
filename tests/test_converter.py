@@ -757,20 +757,26 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertEqual(fetch_json.call_args.kwargs["timeout"], DEFAULT_TIMEOUT_SECONDS)
 
     def test_windows_signature_status_passes_path_as_powershell_argument(self) -> None:
-        malicious_path = Path(r"C:\Users\victim\bad'$(Write-Output PWNED)\EmployeurD-MegaGest.exe")
-        with (
-            patch("employeurd_megagest.integrity.sys.platform", "win32"),
-            patch("employeurd_megagest.integrity.subprocess.run") as run,
-        ):
-            run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="Valid\n", stderr="")
+        malicious_paths = (
+            Path(r"C:\Users\victim\bad'$(Write-Output PWNED)\EmployeurD-MegaGest.exe"),
+            Path("C:/Users/Public/ED'$(Start-Process calc)/EmployeurD-MegaGest.exe"),
+        )
 
-            result = signature_status(malicious_path)
+        for malicious_path in malicious_paths:
+            with self.subTest(path=str(malicious_path)):
+                with (
+                    patch("employeurd_megagest.integrity.sys.platform", "win32"),
+                    patch("employeurd_megagest.integrity.subprocess.run") as run,
+                ):
+                    run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="Valid\n", stderr="")
 
-        command = run.call_args.args[0]
-        self.assertEqual(result, "Valid")
-        self.assertEqual(command[-1], str(malicious_path))
-        self.assertNotIn(str(malicious_path), command[3])
-        self.assertIn("$args[0]", command[3])
+                    result = signature_status(malicious_path)
+
+                command = run.call_args.args[0]
+                self.assertEqual(result, "Valid")
+                self.assertEqual(command[-1], str(malicious_path))
+                self.assertNotIn(str(malicious_path), command[3])
+                self.assertIn("$args[0]", command[3])
 
     def test_package_integrity_hash_changes_when_package_changes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
