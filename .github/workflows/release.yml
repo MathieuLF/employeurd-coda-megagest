@@ -85,6 +85,7 @@ jobs:
             "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION-portable.zip" `
             "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION-portable.zip.sha256" `
             "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION-portable.exe.sha256" `
+            "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.package.sha256" `
             "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.sbom.json" `
             "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.virustotal.md" `
             "dist/EmployeurD-MegaGest-v$env:RELEASE_VERSION.release-manifest.json"
