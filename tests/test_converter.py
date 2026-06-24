@@ -31,7 +31,7 @@ from employeurd_megagest.app_gui import (
 )
 from employeurd_megagest.gui_controller import GuiController, GuiOperationResult
 from employeurd_megagest.gui_state import GuiViewState, build_file_preview, build_metrics, build_output_preview, default_output_root, summary_text
-from employeurd_megagest.integrity import IntegrityCheckResult, app_package_sha256, check_running_app_integrity
+from employeurd_megagest.integrity import IntegrityCheckResult, app_package_sha256, check_running_app_integrity, signature_status
 from employeurd_megagest.output_plan import build_output_plan
 from employeurd_megagest.parser_employeurd import parse_employeurd_file, parse_employeurd_line
 from employeurd_megagest.parser_mnd import parse_mnd_file, parse_mnd_text
@@ -755,6 +755,22 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertEqual(result.expected_sha256, expected_hash)
         self.assertTrue(result.release_url.endswith("/releases/tags/v0.1.0"))
         self.assertEqual(fetch_json.call_args.kwargs["timeout"], DEFAULT_TIMEOUT_SECONDS)
+
+    def test_windows_signature_status_passes_path_as_powershell_argument(self) -> None:
+        malicious_path = Path(r"C:\Users\victim\bad'$(Write-Output PWNED)\EmployeurD-MegaGest.exe")
+        with (
+            patch("employeurd_megagest.integrity.sys.platform", "win32"),
+            patch("employeurd_megagest.integrity.subprocess.run") as run,
+        ):
+            run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="Valid\n", stderr="")
+
+            result = signature_status(malicious_path)
+
+        command = run.call_args.args[0]
+        self.assertEqual(result, "Valid")
+        self.assertEqual(command[-1], str(malicious_path))
+        self.assertNotIn(str(malicious_path), command[3])
+        self.assertIn("$args[0]", command[3])
 
     def test_package_integrity_hash_changes_when_package_changes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
