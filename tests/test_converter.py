@@ -1175,6 +1175,11 @@ class EmployeurDMegaGestTest(unittest.TestCase):
                 f"{zip_sha}  EmployeurD-MegaGest-v9.9.9-portable.zip\n",
                 encoding="ascii",
             )
+            package_sha = "a" * 64
+            (dist / "EmployeurD-MegaGest-v9.9.9.package.sha256").write_text(
+                f"{package_sha}  EmployeurD-MegaGest-v9.9.9-package\n",
+                encoding="ascii",
+            )
             (dist / "EmployeurD-MegaGest-v9.9.9.virustotal.md").write_text(
                 "\n".join(
                     [
@@ -1208,6 +1213,11 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertEqual(manifest["artifacts"][0]["sha256"], zip_sha)
         self.assertEqual(manifest["artifacts"][1]["sha256"], exe_sha)
+        self.assertEqual(manifest["package_sha256"], package_sha)
+        self.assertIn(
+            {"name": "EmployeurD-MegaGest-v9.9.9.package.sha256", "type": "package_sha256", "sha256": package_sha},
+            manifest["artifacts"],
+        )
         self.assertFalse(manifest["privacy"]["payroll_files_submitted"])
 
     def test_release_manifest_blocks_virustotal_detections(self) -> None:
@@ -1225,6 +1235,7 @@ class EmployeurDMegaGestTest(unittest.TestCase):
             zip_sha = generate_release_manifest.sha256_file(portable)
             (dist / "EmployeurD-MegaGest-v9.9.9-portable.exe.sha256").write_text(f"{exe_sha}\n", encoding="ascii")
             (dist / "EmployeurD-MegaGest-v9.9.9-portable.zip.sha256").write_text(f"{zip_sha}\n", encoding="ascii")
+            (dist / "EmployeurD-MegaGest-v9.9.9.package.sha256").write_text(f"{'a' * 64}\n", encoding="ascii")
             (dist / "EmployeurD-MegaGest-v9.9.9.virustotal.md").write_text(
                 "- malicious : 1\n- suspicious : 0\n",
                 encoding="utf-8",

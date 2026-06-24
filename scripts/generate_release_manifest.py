@@ -30,11 +30,12 @@ def main() -> int:
     portable_zip = dist / f"{name}-v{version}-portable.zip"
     exe_sha_file = dist / f"{name}-v{version}-portable.exe.sha256"
     zip_sha_file = dist / f"{name}-v{version}-portable.zip.sha256"
+    package_sha_file = dist / f"{name}-v{version}.package.sha256"
     vt_report = args.virustotal_report or dist / f"{name}-v{version}.virustotal.md"
     output = args.output or dist / f"{name}-v{version}.release-manifest.json"
 
     issues = []
-    for path in (exe, portable_zip, exe_sha_file, zip_sha_file):
+    for path in (exe, portable_zip, exe_sha_file, zip_sha_file, package_sha_file):
         if not path.exists():
             issues.append(f"Artefact manquant: {path}")
 
@@ -42,10 +43,13 @@ def main() -> int:
     zip_sha256 = sha256_file(portable_zip) if portable_zip.exists() else ""
     expected_exe_sha256 = read_sha256(exe_sha_file) if exe_sha_file.exists() else ""
     expected_zip_sha256 = read_sha256(zip_sha_file) if zip_sha_file.exists() else ""
+    package_sha256 = read_sha256(package_sha_file) if package_sha_file.exists() else ""
     if expected_exe_sha256 and exe_sha256.lower() != expected_exe_sha256.lower():
         issues.append("L'empreinte SHA256 de l'exécutable ne correspond pas au fichier .sha256.")
     if expected_zip_sha256 and zip_sha256.lower() != expected_zip_sha256.lower():
         issues.append("L'empreinte SHA256 du paquet portable ne correspond pas au fichier .sha256.")
+    if package_sha_file.exists() and not package_sha256:
+        issues.append("L'empreinte SHA256 du paquet applicatif est illisible.")
 
     virustotal = parse_virustotal_report(vt_report)
     if args.require_clean_virustotal:
@@ -72,6 +76,7 @@ def main() -> int:
             "primary_asset_policy": "portable_zip_only",
             "smartscreen_note": "Application non signée; avertissement SmartScreen possible.",
         },
+        "package_sha256": package_sha256.lower(),
         "artifacts": [
             {
                 "name": portable_zip.name,
@@ -93,6 +98,11 @@ def main() -> int:
                 "name": zip_sha_file.name,
                 "type": "sha256",
                 "sha256": sha256_file(zip_sha_file).lower() if zip_sha_file.exists() else "",
+            },
+            {
+                "name": package_sha_file.name,
+                "type": "package_sha256",
+                "sha256": package_sha256.lower(),
             },
         ],
         "virustotal": virustotal,
@@ -153,19 +163,22 @@ def authenticode_status(path: Path) -> str:
     if pe_status == "NotSigned":
         return pe_status
 
-    completed = subprocess.run(
-        [
-            "powershell",
-            "-NoProfile",
-            "-Command",
-            "$path = $env:EMPLOYEURD_SIGNATURE_PATH; Import-Module Microsoft.PowerShell.Security; (Get-AuthenticodeSignature -LiteralPath $path).Status",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=10,
-        env={**os.environ, "EMPLOYEURD_SIGNATURE_PATH": str(path.resolve())},
-    )
+    try:
+        completed = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "$path = $env:EMPLOYEURD_SIGNATURE_PATH; Import-Module Microsoft.PowerShell.Security; (Get-AuthenticodeSignature -LiteralPath $path).Status",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+            env={**os.environ, "EMPLOYEURD_SIGNATURE_PATH": str(path.resolve())},
+        )
+    except FileNotFoundError:
+        return pe_status or "Non vérifiée"
     return completed.stdout.strip() or pe_status or "Non vérifiée"
 
 
