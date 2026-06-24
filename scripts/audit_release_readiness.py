@@ -214,7 +214,7 @@ def _tracked_file_issues(root: Path) -> list[str]:
     issues = []
     for raw_path in completed.stdout.splitlines():
         normalized = raw_path.replace("\\", "/")
-        if normalized == ".env.example" or normalized.endswith(".example"):
+        if normalized == ".env.example":
             continue
         if any(pattern.search(normalized) for pattern in BLOCKED_TRACKED_PATTERNS):
             issues.append(f"Fichier sensible ou généré suivi par Git: {raw_path}")
