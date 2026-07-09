@@ -38,7 +38,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "La génération du SBOM a échoué avec le code $LASTEXITCODE"
 }
 
-python scripts/extract_changelog.py --version $Version --include-diff --output "dist/EmployeurD-MegaGest-v$Version.release-notes.md"
+python scripts/extract_changelog.py --version $Version --output "dist/EmployeurD-MegaGest-v$Version.release-notes.md"
 if ($LASTEXITCODE -ne 0) {
     throw "L'extraction du journal des changements a échoué avec le code $LASTEXITCODE"
 }
