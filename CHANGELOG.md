@@ -6,9 +6,11 @@ Toutes les versions officielles publiées sur GitHub doivent reprendre la sectio
 
 ## [0.1.4] - 2026-07-09
 
-- Ajoute le rapprochement du PDF grand détail GL avec validation des sous-totaux, totaux et montants par compte.
-- Met le PDF GL en avant dans la CLI, l'interface et la documentation.
+- Remplace le contrôle par rapport de paie brut par le PDF original du grand détail GL, cohérent avec les écritures au net.
+- Compare le PDF GL avec l'écriture EmployeurD avant la génération du MND: totaux débit/crédit, sous-totaux, comptes et montants par compte doivent concorder.
+- Retire les anciens chemins de rapport CSV de l'interface, de la CLI, de la configuration, des échantillons synthétiques et des tests.
 - Précise que le rapport GL attendu est le PDF original généré par EmployeurD, non scanné ni altéré.
+
 ## [0.1.3] - 2026-06-24
 
 - Corrige la vérification de signature Windows pour éviter l'interpolation de chemins dans PowerShell lors du contrôle Authenticode.
