@@ -4,7 +4,7 @@
 2. Extrayez le fichier zip.
 3. Ouvrez `EmployeurD-MegaGest.exe`.
 4. Ajoutez l'écriture détaillée EmployeurD au format TXT.
-5. Ajoutez le rapport SPD640-P CSV au besoin.
+5. Ajoutez le PDF original du grand détail GL au besoin. Il doit venir d'EmployeurD, sans numérisation ni modification.
 6. Cliquez sur `Vérifier la paie`.
 7. Si tout est conforme, cliquez sur `Créer le MND`.
 8. Testez le fichier dans MégaGest hors production avant de l'utiliser réellement.

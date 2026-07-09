@@ -49,4 +49,16 @@ Par défaut, l'application retire le premier chiffre du compte EmployeurD de 11 
 
 ## Rapports de contrôle
 
-Le rapport `SPD640-P` en CSV sert à comparer les totaux débit/crédit de la paie avec le TXT EmployeurD.
+Le rapport recommandé est le PDF original du grand détail de l'écriture GL, tel que généré par EmployeurD. Un PDF scanné, imprimé à nouveau ou modifié peut empêcher la lecture fiable des lignes.
+
+L'application y lit:
+
+- la date d'écriture;
+- les lignes de comptes GL;
+- le côté débit ou crédit selon la position dans le PDF;
+- les sous-totaux;
+- le total compagnie.
+
+Le contrôle compare ensuite les totaux débit/crédit et les montants par compte GL avec le TXT EmployeurD, après conversion du compte source de 11 chiffres vers le compte GL/MND de 10 chiffres.
+
+Le rapport `SPD640-P` en CSV reste accepté pour compatibilité, mais il ne remplace pas le contrôle du PDF GL lorsque l'écriture à valider est au net.
