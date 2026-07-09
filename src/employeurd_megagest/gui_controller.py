@@ -33,13 +33,13 @@ class GuiController:
         self,
         *,
         source_path: Path,
-        spd640_path: Path | None,
-        require_spd640: bool,
+        control_report_path: Path | None,
+        require_control_report: bool,
     ) -> GuiOperationResult:
         config = load_app_config(self.config_dir)
         entries = parse_employeurd_file(source_path, reject_non_crlf=config.validation.reject_non_crlf_source)
         validate_source_entries(entries, config.validation)
-        reconciliations = _build_reconciliations(entries, spd640_path, config, require_spd640)
+        reconciliations = _build_reconciliations(entries, control_report_path, config, require_control_report)
         _raise_if_required_reconciliation_failed(reconciliations)
         result = validate_file(source_path, config, reconciliations=reconciliations)
         operation = GuiOperationResult(
@@ -57,15 +57,15 @@ class GuiController:
         *,
         source_path: Path,
         output_root: Path,
-        spd640_path: Path | None,
-        require_spd640: bool,
+        control_report_path: Path | None,
+        require_control_report: bool,
         write_report: bool,
         write_validation_json: bool,
     ) -> GuiOperationResult:
         config = load_app_config(self.config_dir)
         entries = parse_employeurd_file(source_path, reject_non_crlf=config.validation.reject_non_crlf_source)
         validate_source_entries(entries, config.validation)
-        reconciliations = _build_reconciliations(entries, spd640_path, config, require_spd640)
+        reconciliations = _build_reconciliations(entries, control_report_path, config, require_control_report)
         _raise_if_required_reconciliation_failed(reconciliations)
         output_plan = build_output_plan(
             source_path,
@@ -108,12 +108,12 @@ class GuiController:
         return operation
 
 
-def _build_reconciliations(entries, spd640_path: Path | None, config, require_spd640: bool) -> list[ReconciliationResult]:
-    if not spd640_path:
-        if require_spd640:
+def _build_reconciliations(entries, control_report_path: Path | None, config, require_control_report: bool) -> list[ReconciliationResult]:
+    if not control_report_path:
+        if require_control_report:
             raise ValidationFailed("Le rapport de contrôle est requis en mode bloquant.")
         return []
-    return [reconcile_control_report(entries, spd640_path, config, required=require_spd640 or None)]
+    return [reconcile_control_report(entries, control_report_path, config, required=require_control_report or None)]
 
 
 def _raise_if_required_reconciliation_failed(reconciliations: list[ReconciliationResult]) -> None:

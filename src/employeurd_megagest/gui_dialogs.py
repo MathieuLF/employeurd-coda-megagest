@@ -40,7 +40,7 @@ def show_support_window(parent: tk.Tk) -> None:
             "À ne pas joindre",
             "================",
             "",
-            "Ne joignez jamais de fichier de paie réel, de rapport SPD réel, de MND réel ou de capture contenant des données sensibles.",
+            "Ne joignez jamais de fichier de paie réel, de rapport GL réel, de MND réel ou de capture contenant des données sensibles.",
             "",
             "Indiquez seulement la version de l'application, l'étape concernée et le message affiché.",
         ]

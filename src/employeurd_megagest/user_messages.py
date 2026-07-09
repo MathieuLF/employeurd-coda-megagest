@@ -16,9 +16,6 @@ FRIENDLY_MESSAGES = {
     "gl_detail_subtotal_mismatch": "Un sous-total du PDF GL ne concorde pas avec ses lignes.",
     "gl_detail_total_mismatch": "Le total du PDF GL ne concorde pas avec ses lignes.",
     "gl_detail_empty": "Le PDF GL ne contient aucune ligne lisible. Utilisez le PDF original généré par EmployeurD, non scanné ni altéré.",
-    "spd640_amount_mismatch": "Le rapport SPD640-P ne concorde pas avec les totaux du fichier EmployeurD.",
-    "spd640_batch_mismatch": "Le lot du rapport SPD640-P ne correspond pas au lot du fichier EmployeurD.",
-    "spd640_period_mismatch": "La période du rapport SPD640-P ne correspond pas à la période du fichier EmployeurD.",
     "validation_failed": "La validation ne peut pas continuer avec les options actuelles.",
 }
 

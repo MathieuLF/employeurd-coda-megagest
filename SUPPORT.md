@@ -15,7 +15,6 @@ Courriel : services@mathieu.pro
 
 - fichier de paie réel;
 - PDF grand détail GL réel;
-- rapport SPD réel;
 - fichier MND réel;
 - rapport Markdown ou JSON issu d'une paie réelle;
 - capture contenant des noms, matricules, montants sensibles ou chemins personnels.

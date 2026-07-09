@@ -6,7 +6,6 @@ L'application travaille localement. Les fichiers de paie ne doivent jamais être
 
 - TXT EmployeurD réel;
 - PDF grand détail GL réel;
-- rapport SPD réel;
 - fichier MND réel;
 - rapport Markdown ou JSON issu d'une paie réelle;
 - capture contenant des données sensibles;

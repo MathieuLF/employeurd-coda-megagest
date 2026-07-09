@@ -16,8 +16,6 @@ EmployeurD-MegaGest est un utilitaire Windows qui prépare un fichier `.mnd` pou
 
 Le rapport recommandé est le PDF original du grand détail de l'écriture GL. Il confirme les totaux et les montants par compte avant la création du MND. Il doit venir d'EmployeurD, sans numérisation ni modification.
 
-Le SPD640-P CSV reste accepté pour compatibilité, mais il ne remplace pas le contrôle du PDF GL lorsque l'écriture à valider est au net.
-
 ## Utiliser l'application
 
 1. Télécharger la dernière version depuis [GitHub Releases](https://github.com/MathieuLF/employeurd-coda-megagest/releases).

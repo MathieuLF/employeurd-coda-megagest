@@ -7,7 +7,7 @@ Toutes les versions officielles publiées sur GitHub doivent reprendre la sectio
 ## [0.1.4] - 2026-07-09
 
 - Ajoute le rapprochement du PDF grand détail GL avec validation des sous-totaux, totaux et montants par compte.
-- Met le PDF GL en avant dans la CLI, l'interface et la documentation, tout en gardant le SPD640-P CSV compatible.
+- Met le PDF GL en avant dans la CLI, l'interface et la documentation.
 - Précise que le rapport GL attendu est le PDF original généré par EmployeurD, non scanné ni altéré.
 ## [0.1.3] - 2026-06-24
 
@@ -37,12 +37,12 @@ Toutes les versions officielles publiées sur GitHub doivent reprendre la sectio
 - Conversion EmployeurD TXT vers MND MégaGest avec validation stricte.
 - Parser/writer MND avec roundtrip obligatoire.
 - Rapports Markdown et JSON.
-- Rapprochement SPD640-P CSV configurable.
+- Rapprochement de rapport de contrôle configurable.
 - Interface Windows modernisée pour le choix des fichiers, la vérification et la génération du MND.
 - Journal de conversion avec résumé de validation, résumé de génération et messages lisibles.
 - Rapports Markdown et JSON optionnels, avec les résultats toujours visibles dans l'application.
 - Sorties créées dans un dossier horodaté, avec nommage basé sur l'écriture de paie.
-- Vérification des totaux du MND avec les données source et le rapport SPD640-P lorsqu'il est fourni.
+- Vérification des totaux du MND avec les données source et le rapport de contrôle lorsqu'il est fourni.
 - Microsite public, README simplifié, guide utilisateur, formats, support, sécurité et mentions légales.
 - Licence MIT.
 - Vérification d'intégrité de la version ouverte par comparaison SHA256 avec GitHub Releases.
