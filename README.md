@@ -4,7 +4,7 @@
   <strong>Créer un fichier MND pour MégaGest à partir d'une écriture détaillée EmployeurD.</strong>
 </p>
 
-![Aperçu de l'application](docs/assets/screenshots/v0.1.0/app-main.png)
+![Aperçu de l'application](docs/assets/screenshots/v0.1.4/app-main.png)
 
 <p align="center">
   <a href="https://github.com/sponsors/MathieuLF"><strong>Sponsor GitHub</strong></a>
