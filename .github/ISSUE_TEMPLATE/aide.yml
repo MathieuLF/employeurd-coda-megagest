@@ -5,13 +5,14 @@ body:
   - type: markdown
     attributes:
       value: |
-        Pour les questions publiques, utilisez seulement des exemples synthétiques. N'ajoutez jamais de fichier de paie réel, de rapport SPD réel ou de MND réel.
+        Pour les questions publiques, utilisez seulement des exemples synthétiques. N'ajoutez jamais de fichier de paie réel, de rapport GL ou SPD réel, ni de MND réel.
   - type: dropdown
     id: etape
     attributes:
       label: Étape concernée
       options:
         - Ajouter l'écriture TXT
+        - Ajouter le PDF grand détail GL
         - Ajouter le SPD640-P
         - Vérifier la paie
         - Créer le MND

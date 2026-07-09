@@ -14,7 +14,9 @@
 
 EmployeurD-MegaGest est un utilitaire Windows qui prépare un fichier `.mnd` pour MégaGest à partir d'une écriture détaillée EmployeurD au format TXT.
 
-Le PDF original du grand détail de l'écriture GL peut être ajouté pour confirmer les totaux et les montants par compte avant la création du MND. Il doit venir d'EmployeurD, sans numérisation ni modification.
+Le rapport recommandé est le PDF original du grand détail de l'écriture GL. Il confirme les totaux et les montants par compte avant la création du MND. Il doit venir d'EmployeurD, sans numérisation ni modification.
+
+Le SPD640-P CSV reste accepté pour compatibilité, mais il ne remplace pas le contrôle du PDF GL lorsque l'écriture à valider est au net.
 
 ## Utiliser l'application
 
@@ -22,7 +24,7 @@ Le PDF original du grand détail de l'écriture GL peut être ajouté pour confi
 2. Extraire le fichier zip.
 3. Ouvrir `EmployeurD-MegaGest.exe`.
 4. Ajouter l'écriture EmployeurD TXT.
-5. Ajouter le PDF du grand détail GL au besoin.
+5. Ajouter le PDF original du grand détail GL au besoin.
 6. Vérifier la paie, puis créer le MND si tout est conforme.
 
 ### Première ouverture sur Windows
