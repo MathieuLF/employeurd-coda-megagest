@@ -5,6 +5,7 @@ L'application travaille localement. Les fichiers de paie ne doivent jamais être
 ## À ne pas publier
 
 - TXT EmployeurD réel;
+- PDF grand détail GL réel;
 - rapport SPD réel;
 - fichier MND réel;
 - rapport Markdown ou JSON issu d'une paie réelle;
@@ -15,7 +16,7 @@ L'application travaille localement. Les fichiers de paie ne doivent jamais être
 
 Téléchargez l'application depuis la page officielle des versions GitHub.
 
-Chaque version publique doit fournir les empreintes SHA256. Le paquet Windows officiel est un ZIP portable accompagné d'un manifeste de mise en ligne et d'un rapport VirusTotal sur l'exécutable public.
+Chaque version publique doit fournir les empreintes SHA256. Le paquet Windows officiel est un ZIP portable accompagné d'un manifeste de mise en ligne et d'un rapport VirusTotal sur l'exécutable public seulement.
 
 Aucun certificat de signature payant n'est utilisé. SmartScreen peut donc afficher un avertissement de sécurité ou d'application non reconnue au premier lancement.
 

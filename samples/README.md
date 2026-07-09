@@ -1,7 +1,7 @@
 # Données synthétiques
 
 Ces fichiers sont fictifs et servent seulement aux tests locaux. Ils ne doivent
-pas être remplacés par des fichiers de paie, SPD ou MND réels.
+pas être remplacés par des fichiers de paie, PDF GL, SPD ou MND réels.
 
 ## Scénarios
 
