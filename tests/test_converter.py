@@ -43,7 +43,8 @@ from employeurd_megagest.preferences import (
     remember_update_check_on_startup,
     save_preferences,
 )
-from employeurd_megagest.reconciliation import reconcile_control_report, reconcile_spd640, reconciliation_failed
+from employeurd_megagest.reconciliation import reconcile_control_report, reconcile_gl_detail, reconcile_spd640, reconciliation_failed
+from employeurd_megagest.reports.gl_detail_pdf_parser import parse_gl_detail_pdf
 from employeurd_megagest.reports.spd640_parser import parse_spd640_csv, reconcile_spd640_with_source_totals
 from employeurd_megagest.resource_paths import package_asset_path
 from employeurd_megagest.update_check import DEFAULT_TIMEOUT_SECONDS, DEFAULT_UPDATE_URL, GITHUB_RELEASE_PAGE_BYTES, check_for_update
@@ -62,6 +63,92 @@ BALANCED_CREDIT_ACCOUNT_COUNT = 10
 SPD640_ROW_COUNT = 24
 SPD640_TYPE_G_MONTANTS = Decimal("6200.00")
 SPD640_TYPE_D_MONTANTS = Decimal("4343.00")
+
+
+def _write_synthetic_gl_detail_pdf(
+    path: Path,
+    entries,
+    config,
+    *,
+    adjustments: dict[tuple[str, str], Decimal] | None = None,
+) -> None:
+    adjustments = adjustments or {}
+    operators: list[str] = []
+
+    def text(x: int, y: int, value: str, size: int = 10) -> None:
+        escaped = value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+        operators.append(f"BT /F1 {size} Tf {x} {y} Td ({escaped}) Tj ET\n")
+
+    text(50, 760, "Detail des imputations comptables", 14)
+    text(50, 738, "Date d'ecriture: 2026/06/18")
+    text(50, 720, "Compagnie : 00291843")
+    text(50, 702, "PC : 6")
+    text(50, 684, "Periode de paie : 12")
+    for x, label in (
+        (40, "Div.-Serv.-Dept.-S.-dept."),
+        (208, "Compte"),
+        (395, "Description"),
+        (603, "Ecritures"),
+        (678, "Debit"),
+        (726, "Credit"),
+    ):
+        text(x, 662, label)
+
+    y = 642
+    debit_total = Decimal("0.00")
+    credit_total = Decimal("0.00")
+    for index, entry in enumerate(entries, start=1):
+        account = convert_account(entry.account, config.accounts)
+        side = "debit" if entry.amount > 0 else "credit"
+        amount = entry.amount if entry.amount > 0 else -entry.amount
+        amount += adjustments.get((account, side), Decimal("0.00"))
+        if index == 1:
+            text(66, y, "130")
+            text(94, y, "131")
+        text(208, y, account)
+        text(395, y, f"Ligne synth. {index}")
+        text(603, y, "Reguliere")
+        if side == "debit":
+            debit_total += amount
+            text(672, y, f"{amount:.2f}")
+        else:
+            credit_total += amount
+            text(724, y, f"{amount:.2f}")
+        y -= 14
+
+    text(566, y, "Sous-total")
+    text(672, y, f"{debit_total:.2f}")
+    text(724, y, f"{credit_total:.2f}")
+    y -= 20
+    text(500, y, "Total periode")
+    text(672, y, f"{debit_total:.2f}")
+    text(724, y, f"{credit_total:.2f}")
+    y -= 14
+    text(500, y, "Total compagnie")
+    text(672, y, f"{debit_total:.2f}")
+    text(724, y, f"{credit_total:.2f}")
+
+    content = "".join(operators).encode("latin-1")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        f"<< /Length {len(content)} >>\nstream\n".encode("ascii") + content + b"endstream",
+    ]
+    payload = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for number, pdf_object in enumerate(objects, start=1):
+        offsets.append(len(payload))
+        payload.extend(f"{number} 0 obj\n".encode("ascii"))
+        payload.extend(pdf_object)
+        payload.extend(b"\nendobj\n")
+    xref_offset = len(payload)
+    payload.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode("ascii"))
+    for offset in offsets:
+        payload.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    payload.extend(f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode("ascii"))
+    path.write_bytes(payload)
 
 
 class EmployeurDMegaGestTest(unittest.TestCase):
@@ -223,9 +310,9 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertIn("======= Résumé de la vérification =======", validation_block)
         self.assertNotIn("Relecture MND", validation_block)
 
-    def test_gui_spd640_concordance_message_is_positive_when_report_is_present(self) -> None:
+    def test_gui_gl_detail_concordance_message_is_positive_when_report_is_present(self) -> None:
         self.assertEqual(_validation_mode_style(True, True), "HintSuccess.TLabel")
-        self.assertIn("SPD640-P est actif", _validation_mode_text(True, True, "SPD640-P"))
+        self.assertIn("PDF GL original est actif", _validation_mode_text(True, True, "Grand détail GL"))
         self.assertEqual(_validation_mode_style(False, False), "HintInfo.TLabel")
 
     def test_gui_security_badge_tooltip_lists_simple_guards(self) -> None:
@@ -295,6 +382,59 @@ class EmployeurDMegaGestTest(unittest.TestCase):
     def test_reject_corrupt_mnd_length(self) -> None:
         with self.assertRaises(ValidationFailed):
             parse_mnd_text("P" + "\r\n")
+
+    def test_parse_gl_detail_synthetic_pdf(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        config = self.config()
+        entries = parse_employeurd_file(root / "samples" / "employeurd-balanced.txt")
+        with tempfile.TemporaryDirectory() as directory:
+            report_path = Path(directory) / "GL20260618_00291843_DETAIL_SYNTHETIQUE.pdf"
+            _write_synthetic_gl_detail_pdf(report_path, entries, config)
+            report = parse_gl_detail_pdf(report_path)
+
+        self.assertEqual(report.row_count, BALANCED_ROW_COUNT)
+        self.assertEqual(report.company, "00291843")
+        self.assertEqual(report.accounting_date, date(2026, 6, 18))
+        self.assertEqual(report.period, "202606")
+        self.assertEqual(report.debit_total, BALANCED_TOTAL)
+        self.assertEqual(report.credit_total, BALANCED_TOTAL)
+
+    def test_reconcile_gl_detail_with_source_account_totals(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        config = self.config()
+        source = root / "samples" / "employeurd-balanced.txt"
+        entries = parse_employeurd_file(source)
+        with tempfile.TemporaryDirectory() as directory:
+            report_path = Path(directory) / "GL20260618_00291843_DETAIL_SYNTHETIQUE.pdf"
+            _write_synthetic_gl_detail_pdf(report_path, entries, config)
+            reconciliation = reconcile_gl_detail(entries, report_path, config, required=True)
+
+        self.assertEqual(reconciliation.report_type, "GL_DETAIL")
+        self.assertEqual(reconciliation.status, "success")
+        self.assertEqual(reconciliation.report_debit, BALANCED_TOTAL)
+        self.assertEqual(reconciliation.report_credit, BALANCED_TOTAL)
+        self.assertEqual(reconciliation.details["account_mismatch_count"], "0")
+
+    def test_reconcile_gl_detail_detects_account_mismatch(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        config = self.config()
+        source = root / "samples" / "employeurd-balanced.txt"
+        entries = parse_employeurd_file(source)
+        first_debit = convert_account(entries[0].account, config.accounts)
+        second_debit = convert_account(entries[1].account, config.accounts)
+        adjustments = {
+            (first_debit, "debit"): Decimal("-1.00"),
+            (second_debit, "debit"): Decimal("1.00"),
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            report_path = Path(directory) / "GL20260618_00291843_DETAIL_SYNTHETIQUE.pdf"
+            _write_synthetic_gl_detail_pdf(report_path, entries, config, adjustments=adjustments)
+            reconciliation = reconcile_gl_detail(entries, report_path, config, required=True)
+
+        self.assertEqual(reconciliation.status, "failed")
+        self.assertEqual(reconciliation.debit_difference, Decimal("0.00"))
+        self.assertEqual(reconciliation.details["account_mismatch_count"], "2")
+        self.assertTrue(reconciliation_failed(reconciliation))
 
     def test_parse_spd640_synthetic_report(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -383,7 +523,19 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertEqual(result.debit_difference, Decimal("-6633.00"))
 
-    def test_control_report_rejects_non_spd640_file(self) -> None:
+    def test_control_report_accepts_gl_detail_pdf(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        config = self.config()
+        entries = parse_employeurd_file(root / "samples" / "employeurd-balanced.txt")
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / "GL20260618_00291843_DETAIL_SYNTHETIQUE.pdf"
+            _write_synthetic_gl_detail_pdf(report, entries, config)
+            reconciliation = reconcile_control_report(entries, report, config, required=True)
+
+        self.assertEqual(reconciliation.report_type, "GL_DETAIL")
+        self.assertEqual(reconciliation.status, "success")
+
+    def test_control_report_rejects_unknown_file(self) -> None:
         root = Path(__file__).resolve().parents[1]
         config = self.config()
         entries = parse_employeurd_file(root / "samples" / "employeurd-balanced.txt")
@@ -440,6 +592,29 @@ class EmployeurDMegaGestTest(unittest.TestCase):
             self.assertIn("Écart SPD640-P: débit 0,00 $ / crédit 0,00 $", summary)
             self.assertIn("## Rapprochements", markdown)
             self.assertIn("SPD640", markdown)
+
+    def test_conversion_artifacts_include_gl_detail_reconciliation(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        config = self.config()
+        source = root / "samples" / "employeurd-balanced.txt"
+        entries = parse_employeurd_file(source)
+        with tempfile.TemporaryDirectory() as directory:
+            gl_detail = Path(directory) / "GL20260618_00291843_DETAIL_SYNTHETIQUE.pdf"
+            _write_synthetic_gl_detail_pdf(gl_detail, entries, config)
+            reconciliation = reconcile_gl_detail(entries, gl_detail, config, required=True)
+            output = Path(directory) / "output.mnd"
+            conversion = convert_file(source, output, config, reconciliations=[reconciliation])
+            payload = json.loads(output.with_suffix(".validation.json").read_text(encoding="utf-8"))
+            markdown = output.with_suffix(".rapport.md").read_text(encoding="utf-8")
+
+            gl_payload = next(item for item in payload["reconciliations"] if item["report_type"] == "GL_DETAIL")
+            summary = summary_text(conversion, [reconciliation])
+
+            self.assertEqual(gl_payload["status"], "success")
+            self.assertEqual(gl_payload["details"]["account_mismatch_count"], "0")
+            self.assertIn("Rapport GL: Concordant - totaux comparés débit 6 643,00 $ / crédit 6 643,00 $", summary)
+            self.assertIn("Comptes GL en écart: 0", summary)
+            self.assertIn("GL_DETAIL", markdown)
 
     def test_required_spd640_batch_mismatch_blocks_and_writes_failure_artifacts(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -857,7 +1032,7 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertFalse(output_preview.ok)
         self.assertIn("pas un dossier", output_preview.detail)
 
-    def test_gui_controller_requires_spd640_in_strict_mode(self) -> None:
+    def test_gui_controller_requires_control_report_in_strict_mode(self) -> None:
         root = Path(__file__).resolve().parents[1]
         controller = GuiController(config_dir=root / "config")
 

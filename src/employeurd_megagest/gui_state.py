@@ -131,9 +131,9 @@ def build_metrics(
 ) -> list[ResultMetric]:
     if not result:
         return [
-            ResultMetric("Fichiers", "En attente de vérification"),
-            ResultMetric("MND", "Créé après une vérification réussie"),
-            ResultMetric("SPD640-P", "Facultatif, utile pour confirmer les totaux débit/crédit"),
+        ResultMetric("Fichiers", "En attente de vérification"),
+        ResultMetric("MND", "Créé après une vérification réussie"),
+        ResultMetric("Rapport GL", "Facultatif, utile pour confirmer les montants par compte"),
         ]
 
     delta = abs(result.total_debit - result.total_credit)
@@ -157,7 +157,7 @@ def build_metrics(
         for reconciliation in current_reconciliations:
             metrics.extend(_reconciliation_metrics(reconciliation))
     else:
-        metrics.append(ResultMetric("SPD640-P", "Non fourni / optionnel"))
+        metrics.append(ResultMetric("Rapport GL", "Non fourni / optionnel"))
     return metrics
 
 
@@ -227,6 +227,21 @@ def _format_money(value: Decimal) -> str:
 
 def _reconciliation_metrics(reconciliation: ReconciliationResult) -> list[ResultMetric]:
     status = "concordant" if reconciliation.status == "success" else "en écart"
+    if reconciliation.report_type == "GL_DETAIL":
+        metrics = [
+            ResultMetric(
+                "Rapport GL",
+                f"{status.capitalize()} - totaux comparés débit {_format_money(reconciliation.report_debit)} / crédit {_format_money(reconciliation.report_credit)}",
+            ),
+            ResultMetric(
+                "Écart GL",
+                f"débit {_format_money(reconciliation.debit_difference)} / crédit {_format_money(reconciliation.credit_difference)}",
+            ),
+        ]
+        mismatch_count = reconciliation.details.get("account_mismatch_count")
+        if mismatch_count is not None:
+            metrics.append(ResultMetric("Comptes GL en écart", mismatch_count))
+        return metrics
     if reconciliation.report_type == "SPD640":
         return [
             ResultMetric(

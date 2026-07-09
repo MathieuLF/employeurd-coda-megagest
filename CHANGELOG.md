@@ -4,6 +4,11 @@ Toutes les versions officielles publiées sur GitHub doivent reprendre la sectio
 
 ## [Non publié]
 
+## [0.1.4] - 2026-07-09
+
+- Ajoute le rapprochement du PDF grand détail GL avec validation des sous-totaux, totaux et montants par compte.
+- Met le PDF GL en avant dans la CLI, l'interface et la documentation, tout en gardant le SPD640-P CSV compatible.
+- Précise que le rapport GL attendu est le PDF original généré par EmployeurD, non scanné ni altéré.
 ## [0.1.3] - 2026-06-24
 
 - Corrige la vérification de signature Windows pour éviter l'interpolation de chemins dans PowerShell lors du contrôle Authenticode.

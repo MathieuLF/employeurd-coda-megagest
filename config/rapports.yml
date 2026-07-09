@@ -1,4 +1,11 @@
 reports:
+  gl_detail:
+    enabled: true
+    mode: "advisory"
+    tolerance: "0.00"
+    require_matching_date: true
+    require_account_totals: true
+
   spd640:
     enabled: true
     mode: "advisory"

@@ -554,7 +554,7 @@ class EmployeurDMegaGestApp(tk.Tk):
 
     def _build_inputs_card(self, parent: ttk.Frame) -> ttk.Frame:
         card = _card(parent)
-        _card_title(card, "1", "Fichiers EmployeurD", "Ajoutez le TXT de paie. Le SPD640-P peut confirmer les totaux.").grid(row=0, column=0, columnspan=3, sticky="ew")
+        _card_title(card, "1", "Fichiers EmployeurD", "Ajoutez le TXT de paie. Le PDF GL peut confirmer les montants.").grid(row=0, column=0, columnspan=3, sticky="ew")
         card.columnconfigure(1, weight=1)
 
         _file_heading(card, "Écriture détaillée EmployeurD (TXT)", "OBLIGATOIRE", "RequiredBadge.TLabel").grid(row=1, column=0, columnspan=3, sticky="ew", pady=(5, 0))
@@ -572,10 +572,10 @@ class EmployeurDMegaGestApp(tk.Tk):
         self.source_meta.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(4, 0))
 
         ttk.Separator(card).grid(row=5, column=0, columnspan=3, sticky="ew", pady=4)
-        _file_heading(card, "Rapport de totaux SPD640-P (CSV)", "FACULTATIF", "OptionalBadge.TLabel").grid(row=6, column=0, columnspan=3, sticky="ew")
+        _file_heading(card, "Grand détail de l'écriture GL (PDF)", "FACULTATIF", "OptionalBadge.TLabel").grid(row=6, column=0, columnspan=3, sticky="ew")
         ttk.Label(
             card,
-            text="Recommandé pour confirmer les débits et crédits de la paie.",
+            text="Utilisez le PDF original généré par EmployeurD, non scanné ni modifié.",
             style="SmallMuted.TLabel",
             wraplength=430,
             justify="left",
@@ -593,15 +593,15 @@ class EmployeurDMegaGestApp(tk.Tk):
 
     def _build_validation_card(self, parent: ttk.Frame) -> ttk.Frame:
         card = _card(parent)
-        _card_title(card, "2", "Concordance", "Avec le SPD640-P, vous pouvez bloquer la création si les totaux ne concordent pas.").grid(row=0, column=0, sticky="ew")
+        _card_title(card, "2", "Concordance", "Avec le PDF GL, la création bloque si les montants ne concordent pas.").grid(row=0, column=0, sticky="ew")
         self.validation_mode_label = ttk.Label(card, text="", style="HintInfo.TLabel", wraplength=430, justify="left")
         self.validation_mode_label.grid(row=1, column=0, sticky="ew", pady=(5, 4))
         self.require_spd640_check = CheckOption(
             card,
             variable=self.require_spd640,
             command=self._mark_dirty,
-            text="Concordance du SPD640-P obligatoire",
-            description="S'active automatiquement dès qu'un SPD640-P est ajouté.",
+            text="Concordance du rapport obligatoire",
+            description="S'active automatiquement dès qu'un rapport est ajouté.",
         )
         self.require_spd640_check.grid(row=2, column=0, sticky="ew", pady=(2, 0))
         return card
@@ -739,19 +739,23 @@ class EmployeurDMegaGestApp(tk.Tk):
 
     def _choose_spd640(self) -> None:
         selected = filedialog.askopenfilename(
-            title="Choisir le rapport SPD640-P",
-            filetypes=[("Rapports SPD640-P", "*.csv *.CSV"), ("Tous les fichiers", "*.*")],
+            title="Choisir le rapport de contrôle",
+            filetypes=[
+                ("Rapports GL PDF", "*.pdf *.PDF"),
+                ("Rapports SPD640-P", "*.csv *.CSV"),
+                ("Tous les fichiers", "*.*"),
+            ],
         )
         if selected:
             self.spd640_path.set(selected)
-            self.require_spd640.set(_control_report_kind(selected) == "SPD640-P")
-            self._log_event(f"Rapport SPD640-P sélectionné : {Path(selected).name}")
+            self.require_spd640.set(_control_report_kind(selected) in {"Grand détail GL", "SPD640-P"})
+            self._log_event(f"Rapport de contrôle sélectionné : {Path(selected).name}")
             self._refresh_all()
 
     def _clear_spd640(self) -> None:
         self.spd640_path.set("")
         self.require_spd640.set(False)
-        self._log_event("Rapport SPD640-P retiré.")
+        self._log_event("Rapport de contrôle retiré.")
         self._mark_dirty()
 
     def _choose_output_dir(self) -> None:
@@ -992,7 +996,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         if not output_preview.ok:
             raise ConversionError(output_preview.detail)
         if self.require_spd640.get() and not self.spd640_path.get().strip():
-            raise ValidationFailed("Le rapport SPD640-P est requis en mode bloquant.")
+            raise ValidationFailed("Le rapport de contrôle est requis en mode bloquant.")
 
     def _mark_dirty(self) -> None:
         if self.busy:
@@ -1006,7 +1010,12 @@ class EmployeurDMegaGestApp(tk.Tk):
 
     def _refresh_all(self) -> None:
         source_preview = build_file_preview(self.source_path.get(), label="EmployeurD", suffixes=(".txt",), optional=False)
-        spd_preview = build_file_preview(self.spd640_path.get(), label="Rapport SPD640-P", suffixes=(".csv",), optional=True)
+        spd_preview = build_file_preview(
+            self.spd640_path.get(),
+            label="Rapport de contrôle",
+            suffixes=(".pdf", ".csv"),
+            optional=True,
+        )
         output_preview = build_output_preview(
             self.source_path.get(),
             self.output_dir.get(),
@@ -1311,11 +1320,13 @@ def _dashboard_text(parent: tk.Widget, *, height: int, font_size: int = 10) -> t
     )
 
 def _validation_mode_text(has_report: bool, strict: bool, report_kind: str) -> str:
+    if has_report and report_kind == "Grand détail GL":
+        return "Le PDF GL original est actif : ses totaux et ses comptes doivent concorder avec l'écriture."
     if has_report and report_kind == "SPD640-P":
         return "Le SPD640-P est actif : ses totaux doivent concorder avec l'écriture, sinon le MND ne sera pas créé."
     if has_report:
-        return "Le rapport fourni doit être un SPD640-P CSV pour confirmer les totaux."
-    return "On vérifie l'écriture EmployeurD seule. Ajoutez le SPD640-P CSV pour confirmer les totaux de paie."
+        return "Le rapport fourni doit être un PDF GL ou un SPD640-P CSV."
+    return "On vérifie l'écriture EmployeurD seule. Ajoutez le PDF GL original pour confirmer les montants."
 
 
 def _validation_mode_style(has_report: bool, strict: bool) -> str:
@@ -1327,11 +1338,13 @@ def _validation_mode_style(has_report: bool, strict: bool) -> str:
 def _control_report_kind(value: str) -> str:
     path = Path(value.strip()) if value.strip() else None
     if not path:
-        return "rapport SPD640-P"
+        return "rapport GL"
     name = path.name.lower()
+    if path.suffix.lower() == ".pdf" or "détail des imputations comptables" in name or "detail des imputations comptables" in name:
+        return "Grand détail GL"
     if "spd640" in name or path.suffix.lower() == ".csv":
         return "SPD640-P"
-    return "rapport SPD640-P"
+    return "rapport GL"
 
 
 def _generated_outputs_message(result: GuiOperationResult) -> str:

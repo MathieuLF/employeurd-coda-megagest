@@ -12,8 +12,9 @@ from .errors import ConfigurationError, ConversionError, FileOperationError, Val
 from .integrity import check_running_app_integrity
 from .parser_mnd import parse_mnd_file
 from .parser_employeurd import parse_employeurd_file
+from .reports.gl_detail_pdf_parser import parse_gl_detail_pdf
 from .reports.spd640_parser import parse_spd640_csv
-from .reconciliation import reconcile_spd640, reconciliation_failed
+from .reconciliation import reconcile_gl_detail, reconcile_spd640, reconciliation_failed
 from .update_check import check_for_update
 from .validator import mnd_totals, validate_source_entries
 from .version import __version__
@@ -43,6 +44,8 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser.add_argument("--report", type=Path)
     validate_parser.add_argument("--json", type=Path, dest="validation_json")
     validate_parser.add_argument("--overwrite", action="store_true")
+    validate_parser.add_argument("--gl-detail", type=Path, help="PDF grand détail de l'écriture GL à comparer.")
+    validate_parser.add_argument("--require-gl-detail", action="store_true", help="Bloque si le rapprochement GL PDF échoue.")
     validate_parser.add_argument("--spd640", type=Path, help="Rapport SPD640-P CSV à comparer.")
     validate_parser.add_argument("--require-spd640", action="store_true", help="Bloque si le rapprochement SPD640 échoue.")
 
@@ -51,14 +54,23 @@ def build_parser() -> argparse.ArgumentParser:
     convert_parser.add_argument("output", type=Path)
     convert_parser.add_argument("--period", help="Période forcée AAAAMM.")
     convert_parser.add_argument("--overwrite", action="store_true")
+    convert_parser.add_argument("--gl-detail", type=Path, help="PDF grand détail de l'écriture GL à comparer avant la création.")
+    convert_parser.add_argument("--require-gl-detail", action="store_true", help="Bloque si le rapprochement GL PDF échoue.")
     convert_parser.add_argument("--spd640", type=Path, help="Rapport SPD640-P CSV à comparer avant la création.")
     convert_parser.add_argument("--require-spd640", action="store_true", help="Bloque si le rapprochement SPD640 échoue.")
 
     parse_parser = subparsers.add_parser("parse-mnd", help="Parse un fichier MND et affiche ses totaux.")
     parse_parser.add_argument("input", type=Path)
 
+    gl_detail_parser = subparsers.add_parser("parse-gl-detail", help="Lit un PDF grand détail GL et affiche ses totaux.")
+    gl_detail_parser.add_argument("input", type=Path)
+
     spd640_parser = subparsers.add_parser("parse-spd640", help="Lit un rapport SPD640-P CSV et affiche ses totaux.")
     spd640_parser.add_argument("input", type=Path)
+
+    reconcile_gl_parser = subparsers.add_parser("reconcile-gl-detail", help="Compare un TXT EmployeurD avec un PDF grand détail GL.")
+    reconcile_gl_parser.add_argument("source", type=Path)
+    reconcile_gl_parser.add_argument("gl_detail", type=Path)
 
     reconcile_parser = subparsers.add_parser("reconcile-spd640", help="Compare un TXT EmployeurD avec un rapport SPD640-P CSV.")
     reconcile_parser.add_argument("source", type=Path)
@@ -123,9 +135,23 @@ def main(argv: list[str] | None = None) -> int:
             _print_result(len(entries), debit, credit, entries[0].period if entries else None, entries[0].batch if entries else None)
             return EXIT_OK
 
+        if args.command == "parse-gl-detail":
+            report = parse_gl_detail_pdf(args.input)
+            _print_gl_detail_report(report)
+            return EXIT_OK
+
         if args.command == "parse-spd640":
             report = parse_spd640_csv(args.input)
             _print_spd640_report(report)
+            return EXIT_OK
+
+        if args.command == "reconcile-gl-detail":
+            result = _handle_gl_detail_reconciliation(args.source, args.gl_detail, config, require=True)
+            if reconciliation_failed(result):
+                raise ValidationFailed(
+                    f"Rapprochement GL PDF en écart: débit={result.debit_difference:.2f}, crédit={result.credit_difference:.2f}."
+                )
+            _audit(config, "reconcile_gl_detail", "success", {})
             return EXIT_OK
 
         if args.command == "reconcile-spd640":
@@ -217,12 +243,37 @@ def _handle_spd640_reconciliation(source_path: Path, report_path: Path, config, 
     return result
 
 
+def _handle_gl_detail_reconciliation(source_path: Path, report_path: Path, config, *, require: bool):
+    entries = parse_employeurd_file(source_path, reject_non_crlf=config.validation.reject_non_crlf_source)
+    validate_source_entries(entries, config.validation)
+    result = reconcile_gl_detail(entries, report_path, config, required=require or None)
+    _print_gl_detail_reconciliation(result)
+    return result
+
+
 def _collect_control_reconciliations(args, source_path: Path, config) -> list:
-    report_path = getattr(args, "spd640", None)
-    if not report_path:
-        return []
-    require = bool(getattr(args, "require_spd640", False))
-    return [_handle_spd640_reconciliation(source_path, report_path, config, require=require)]
+    reconciliations = []
+    gl_detail_path = getattr(args, "gl_detail", None)
+    if gl_detail_path:
+        require = bool(getattr(args, "require_gl_detail", False))
+        reconciliations.append(_handle_gl_detail_reconciliation(source_path, gl_detail_path, config, require=require))
+    spd640_path = getattr(args, "spd640", None)
+    if spd640_path:
+        require = bool(getattr(args, "require_spd640", False))
+        reconciliations.append(_handle_spd640_reconciliation(source_path, spd640_path, config, require=require))
+    return reconciliations
+
+
+def _print_gl_detail_report(report) -> None:
+    print(f"lignes={report.row_count}")
+    print(f"compagnie={report.company or 'n/d'}")
+    print(f"date_ecriture={report.accounting_date.isoformat() if report.accounting_date else 'n/d'}")
+    print(f"periode={report.period or 'n/d'}")
+    print(f"pc={report.accounting_period or 'n/d'}")
+    print(f"periode_paie={report.payroll_period or 'n/d'}")
+    print(f"sous_totaux={report.subtotal_count}")
+    print(f"debit={report.debit_total:.2f}")
+    print(f"credit={report.credit_total:.2f}")
 
 
 def _print_spd640_report(report) -> None:
@@ -248,3 +299,15 @@ def _print_spd640_reconciliation(result) -> None:
     print(f"spd640_credit={result.report_credit:.2f}")
     print(f"debit_difference={result.debit_difference:.2f}")
     print(f"credit_difference={result.credit_difference:.2f}")
+
+
+def _print_gl_detail_reconciliation(result) -> None:
+    status = "OK" if result.status == "success" else "ECART" if result.status == "failed" else "IGNORE"
+    print(f"gl_detail={status}")
+    print(f"source_debit={result.source_debit:.2f}")
+    print(f"source_credit={result.source_credit:.2f}")
+    print(f"gl_detail_debit={result.report_debit:.2f}")
+    print(f"gl_detail_credit={result.report_credit:.2f}")
+    print(f"debit_difference={result.debit_difference:.2f}")
+    print(f"credit_difference={result.credit_difference:.2f}")
+    print(f"account_mismatch_count={result.details.get('account_mismatch_count', '0')}")
