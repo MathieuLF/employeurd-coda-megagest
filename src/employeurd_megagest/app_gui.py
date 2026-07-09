@@ -448,9 +448,9 @@ class EmployeurDMegaGestApp(tk.Tk):
             default_update_check_on_startup=self.app_config.updates.get("check_on_startup") is True
         )
         self.source_path = tk.StringVar()
-        self.spd640_path = tk.StringVar()
+        self.control_report_path = tk.StringVar()
         self.output_dir = tk.StringVar(value=_usable_saved_output_dir(self.preferences.output_dir))
-        self.require_spd640 = tk.BooleanVar(value=False)
+        self.require_control_report = tk.BooleanVar(value=False)
         self.write_report_md = tk.BooleanVar(value=False)
         self.write_validation_json = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value="Prêt à commencer")
@@ -522,7 +522,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         self._build_action_bar().grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 6))
         self._build_footer().grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 6))
 
-        for variable in (self.source_path, self.spd640_path):
+        for variable in (self.source_path, self.control_report_path):
             variable.trace_add("write", lambda *_: self._mark_dirty())
         self.output_dir.trace_add("write", lambda *_: self._refresh_all())
 
@@ -580,15 +580,15 @@ class EmployeurDMegaGestApp(tk.Tk):
             wraplength=430,
             justify="left",
         ).grid(row=7, column=0, columnspan=3, sticky="ew", pady=(1, 1))
-        ttk.Entry(card, textvariable=self.spd640_path).grid(row=8, column=0, columnspan=2, sticky="ew", pady=(3, 0))
-        spd_actions = ttk.Frame(card, style="CardBody.TFrame")
-        spd_actions.grid(row=8, column=2, sticky="e", padx=(10, 0), pady=(3, 0))
-        self.spd640_button = ttk.Button(spd_actions, text=Text.choose, command=self._choose_spd640, style="Action.TButton")
-        self.spd640_button.grid(row=0, column=0, padx=(0, 6))
-        self.clear_spd640_button = ttk.Button(spd_actions, text=Text.remove, command=self._clear_spd640, style="Quiet.TButton")
-        self.clear_spd640_button.grid(row=0, column=1)
-        self.spd640_meta = ttk.Label(card, text="", style="SmallMuted.TLabel", wraplength=430, justify="left")
-        self.spd640_meta.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(4, 0))
+        ttk.Entry(card, textvariable=self.control_report_path).grid(row=8, column=0, columnspan=2, sticky="ew", pady=(3, 0))
+        report_actions = ttk.Frame(card, style="CardBody.TFrame")
+        report_actions.grid(row=8, column=2, sticky="e", padx=(10, 0), pady=(3, 0))
+        self.control_report_button = ttk.Button(report_actions, text=Text.choose, command=self._choose_control_report, style="Action.TButton")
+        self.control_report_button.grid(row=0, column=0, padx=(0, 6))
+        self.clear_control_report_button = ttk.Button(report_actions, text=Text.remove, command=self._clear_control_report, style="Quiet.TButton")
+        self.clear_control_report_button.grid(row=0, column=1)
+        self.control_report_meta = ttk.Label(card, text="", style="SmallMuted.TLabel", wraplength=430, justify="left")
+        self.control_report_meta.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(4, 0))
         return card
 
     def _build_validation_card(self, parent: ttk.Frame) -> ttk.Frame:
@@ -596,14 +596,14 @@ class EmployeurDMegaGestApp(tk.Tk):
         _card_title(card, "2", "Concordance", "Avec le PDF GL, la création bloque si les montants ne concordent pas.").grid(row=0, column=0, sticky="ew")
         self.validation_mode_label = ttk.Label(card, text="", style="HintInfo.TLabel", wraplength=430, justify="left")
         self.validation_mode_label.grid(row=1, column=0, sticky="ew", pady=(5, 4))
-        self.require_spd640_check = CheckOption(
+        self.require_control_report_check = CheckOption(
             card,
-            variable=self.require_spd640,
+            variable=self.require_control_report,
             command=self._mark_dirty,
             text="Concordance du rapport obligatoire",
             description="S'active automatiquement dès qu'un rapport est ajouté.",
         )
-        self.require_spd640_check.grid(row=2, column=0, sticky="ew", pady=(2, 0))
+        self.require_control_report_check.grid(row=2, column=0, sticky="ew", pady=(2, 0))
         return card
 
     def _build_output_card(self, parent: ttk.Frame) -> ttk.Frame:
@@ -737,24 +737,23 @@ class EmployeurDMegaGestApp(tk.Tk):
             self.source_path.set(selected)
             self._log_event(f"Écriture sélectionnée : {Path(selected).name}")
 
-    def _choose_spd640(self) -> None:
+    def _choose_control_report(self) -> None:
         selected = filedialog.askopenfilename(
             title="Choisir le rapport de contrôle",
             filetypes=[
                 ("Rapports GL PDF", "*.pdf *.PDF"),
-                ("Rapports SPD640-P", "*.csv *.CSV"),
                 ("Tous les fichiers", "*.*"),
             ],
         )
         if selected:
-            self.spd640_path.set(selected)
-            self.require_spd640.set(_control_report_kind(selected) in {"Grand détail GL", "SPD640-P"})
+            self.control_report_path.set(selected)
+            self.require_control_report.set(_control_report_kind(selected) == "Grand détail GL")
             self._log_event(f"Rapport de contrôle sélectionné : {Path(selected).name}")
             self._refresh_all()
 
-    def _clear_spd640(self) -> None:
-        self.spd640_path.set("")
-        self.require_spd640.set(False)
+    def _clear_control_report(self) -> None:
+        self.control_report_path.set("")
+        self.require_control_report.set(False)
         self._log_event("Rapport de contrôle retiré.")
         self._mark_dirty()
 
@@ -777,14 +776,14 @@ class EmployeurDMegaGestApp(tk.Tk):
             return
 
         source_path = Path(self.source_path.get())
-        spd640_path = _optional_path(self.spd640_path.get())
-        require_spd640 = bool(spd640_path)
+        control_report_path = _optional_path(self.control_report_path.get())
+        require_control_report = bool(control_report_path)
         self._run_background(
             "Validation en cours",
             lambda: self.controller.validate(
                 source_path=source_path,
-                spd640_path=spd640_path,
-                require_spd640=require_spd640,
+                control_report_path=control_report_path,
+                require_control_report=require_control_report,
             ),
             self._validation_succeeded,
         )
@@ -801,8 +800,8 @@ class EmployeurDMegaGestApp(tk.Tk):
 
         source_path = Path(self.source_path.get())
         output_root = self._resolved_output_root()
-        spd640_path = _optional_path(self.spd640_path.get())
-        require_spd640 = bool(spd640_path)
+        control_report_path = _optional_path(self.control_report_path.get())
+        require_control_report = bool(control_report_path)
         write_report = self.write_report_md.get()
         write_validation_json = self.write_validation_json.get()
         self._run_background(
@@ -810,8 +809,8 @@ class EmployeurDMegaGestApp(tk.Tk):
             lambda: self.controller.generate(
                 source_path=source_path,
                 output_root=output_root,
-                spd640_path=spd640_path,
-                require_spd640=require_spd640,
+                control_report_path=control_report_path,
+                require_control_report=require_control_report,
                 write_report=write_report,
                 write_validation_json=write_validation_json,
             ),
@@ -995,7 +994,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         )
         if not output_preview.ok:
             raise ConversionError(output_preview.detail)
-        if self.require_spd640.get() and not self.spd640_path.get().strip():
+        if self.require_control_report.get() and not self.control_report_path.get().strip():
             raise ValidationFailed("Le rapport de contrôle est requis en mode bloquant.")
 
     def _mark_dirty(self) -> None:
@@ -1010,10 +1009,10 @@ class EmployeurDMegaGestApp(tk.Tk):
 
     def _refresh_all(self) -> None:
         source_preview = build_file_preview(self.source_path.get(), label="EmployeurD", suffixes=(".txt",), optional=False)
-        spd_preview = build_file_preview(
-            self.spd640_path.get(),
+        report_preview = build_file_preview(
+            self.control_report_path.get(),
             label="Rapport de contrôle",
-            suffixes=(".pdf", ".csv"),
+            suffixes=(".pdf",),
             optional=True,
         )
         output_preview = build_output_preview(
@@ -1024,22 +1023,22 @@ class EmployeurDMegaGestApp(tk.Tk):
         )
 
         _set_optional_label(self.source_meta, _file_preview_text(source_preview))
-        _set_optional_label(self.spd640_meta, _file_preview_text(spd_preview))
+        _set_optional_label(self.control_report_meta, _file_preview_text(report_preview))
         self.output_meta.configure(text=output_preview.detail)
         self.output_files.configure(text=_output_files_text(output_preview.files))
 
-        has_spd640 = bool(self.spd640_path.get().strip())
-        if has_spd640 and not self.require_spd640.get():
-            self.require_spd640.set(True)
-        elif not has_spd640 and self.require_spd640.get():
-            self.require_spd640.set(False)
+        has_control_report = bool(self.control_report_path.get().strip())
+        if has_control_report and not self.require_control_report.get():
+            self.require_control_report.set(True)
+        elif not has_control_report and self.require_control_report.get():
+            self.require_control_report.set(False)
         if self.busy:
-            self.require_spd640_check.state(["disabled", "!locked"])
-        elif has_spd640:
-            self.require_spd640_check.state(["!disabled", "locked"])
+            self.require_control_report_check.state(["disabled", "!locked"])
+        elif has_control_report:
+            self.require_control_report_check.state(["!disabled", "locked"])
         else:
-            self.require_spd640_check.state(["disabled", "!locked"])
-        self.clear_spd640_button.state(["!disabled"] if has_spd640 and not self.busy else ["disabled"])
+            self.require_control_report_check.state(["disabled", "!locked"])
+        self.clear_control_report_button.state(["!disabled"] if has_control_report and not self.busy else ["disabled"])
 
         can_validate = self._can_validate()
         can_generate = self._can_generate()
@@ -1050,7 +1049,7 @@ class EmployeurDMegaGestApp(tk.Tk):
         folder_available = bool(generated_files(self.last_result.conversion) if self.last_result and self.last_result.conversion else False) or self._resolved_output_root().exists()
         self.folder_button.state(["!disabled"] if folder_available and not self.busy else ["disabled"])
         self.source_button.state(["disabled"] if self.busy else ["!disabled"])
-        self.spd640_button.state(["disabled"] if self.busy else ["!disabled"])
+        self.control_report_button.state(["disabled"] if self.busy else ["!disabled"])
         self.output_button.state(["disabled"] if self.busy else ["!disabled"])
         self.report_option.state(["disabled"] if self.busy else ["!disabled"])
         self.json_option.state(["disabled"] if self.busy else ["!disabled"])
@@ -1060,8 +1059,8 @@ class EmployeurDMegaGestApp(tk.Tk):
             self.progress.grid_remove()
 
         self.validation_mode_label.configure(
-            text=_validation_mode_text(has_spd640, self.require_spd640.get(), _control_report_kind(self.spd640_path.get())),
-            style=_validation_mode_style(has_spd640, self.require_spd640.get()),
+            text=_validation_mode_text(has_control_report, self.require_control_report.get(), _control_report_kind(self.control_report_path.get())),
+            style=_validation_mode_style(has_control_report, self.require_control_report.get()),
         )
         self.disabled_reason.set(self._disabled_reason(can_validate, can_generate))
         self._refresh_dashboard()
@@ -1322,10 +1321,8 @@ def _dashboard_text(parent: tk.Widget, *, height: int, font_size: int = 10) -> t
 def _validation_mode_text(has_report: bool, strict: bool, report_kind: str) -> str:
     if has_report and report_kind == "Grand détail GL":
         return "Le PDF GL original est actif : ses totaux et ses comptes doivent concorder avec l'écriture."
-    if has_report and report_kind == "SPD640-P":
-        return "Le SPD640-P est actif : ses totaux doivent concorder avec l'écriture, sinon le MND ne sera pas créé."
     if has_report:
-        return "Le rapport fourni doit être un PDF GL ou un SPD640-P CSV."
+        return "Le rapport fourni doit être le PDF grand détail GL original."
     return "On vérifie l'écriture EmployeurD seule. Ajoutez le PDF GL original pour confirmer les montants."
 
 
@@ -1342,8 +1339,6 @@ def _control_report_kind(value: str) -> str:
     name = path.name.lower()
     if path.suffix.lower() == ".pdf" or "détail des imputations comptables" in name or "detail des imputations comptables" in name:
         return "Grand détail GL"
-    if "spd640" in name or path.suffix.lower() == ".csv":
-        return "SPD640-P"
     return "rapport GL"
 
 

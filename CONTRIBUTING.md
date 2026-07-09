@@ -20,6 +20,5 @@ Ces commandes ne demandent ni base de données, ni serveur, ni clé secrète. `V
 ## À garder en tête
 
 - Le MND ne doit pas être créé si une validation bloquante échoue.
-- Le PDF original du grand détail GL est le rapport de contrôle recommandé.
-- Le SPD640-P CSV reste accepté pour compatibilité, mais ne remplace pas le PDF GL quand l'écriture est au net.
+- Le PDF original du grand détail GL est le rapport de contrôle attendu.
 - Les textes visibles par les utilisateurs doivent rester courts et naturels.

@@ -50,5 +50,5 @@ $VirusTotal = "dist/EmployeurD-MegaGest-v$Version.virustotal.md"
 # Rapport VirusTotal EmployeurD-MegaGest v$Version
 
 Rapport à produire après l'analyse de l'exécutable public seulement.
-Ne jamais soumettre de TXT EmployeurD, SPD, MND, Markdown ou JSON de validation.
+Ne jamais soumettre de TXT EmployeurD, rapport de contrôle, MND, Markdown ou JSON de validation.
 "@ | Set-Content -Encoding utf8 $VirusTotal

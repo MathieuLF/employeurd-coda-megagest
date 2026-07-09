@@ -60,5 +60,3 @@ L'application y lit:
 - le total compagnie.
 
 Le contrôle compare ensuite les totaux débit/crédit et les montants par compte GL avec le TXT EmployeurD, après conversion du compte source de 11 chiffres vers le compte GL/MND de 10 chiffres.
-
-Le rapport `SPD640-P` en CSV reste accepté pour compatibilité, mais il ne remplace pas le contrôle du PDF GL lorsque l'écriture à valider est au net.

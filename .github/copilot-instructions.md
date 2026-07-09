@@ -5,7 +5,7 @@
 - Pour valider : `python scripts/agent_validate.py`.
 - Les tests de base ne demandent ni base de données, ni serveur, ni secret.
 - Ne pas exiger `VT_API_KEY` sauf pour une publication officielle explicitement demandée.
-- Ne jamais ajouter de fichier de paie réel, rapport GL ou SPD réel, MND réel ou secret.
+- Ne jamais ajouter de fichier de paie réel, rapport GL réel, MND réel ou secret.
 - Garder les textes visibles par les utilisateurs courts, naturels et en français.
 - Le canal public principal est le ZIP portable, pas un `.exe` publié seul.
 - Ne pas créer de tag, release, push sur `main` ou soumission VirusTotal sans demande explicite.

@@ -43,9 +43,8 @@ from employeurd_megagest.preferences import (
     remember_update_check_on_startup,
     save_preferences,
 )
-from employeurd_megagest.reconciliation import reconcile_control_report, reconcile_gl_detail, reconcile_spd640, reconciliation_failed
+from employeurd_megagest.reconciliation import reconcile_control_report, reconcile_gl_detail, reconciliation_failed
 from employeurd_megagest.reports.gl_detail_pdf_parser import parse_gl_detail_pdf
-from employeurd_megagest.reports.spd640_parser import parse_spd640_csv, reconcile_spd640_with_source_totals
 from employeurd_megagest.resource_paths import package_asset_path
 from employeurd_megagest.update_check import DEFAULT_TIMEOUT_SECONDS, DEFAULT_UPDATE_URL, GITHUB_RELEASE_PAGE_BYTES, check_for_update
 from employeurd_megagest.validator import convert_account, mnd_totals, source_totals
@@ -60,9 +59,6 @@ BALANCED_TOTAL = Decimal("6643.00")
 BALANCED_ACCOUNT_COUNT = 20
 BALANCED_DEBIT_ACCOUNT_COUNT = 10
 BALANCED_CREDIT_ACCOUNT_COUNT = 10
-SPD640_ROW_COUNT = 24
-SPD640_TYPE_G_MONTANTS = Decimal("6200.00")
-SPD640_TYPE_D_MONTANTS = Decimal("4343.00")
 
 
 def _write_synthetic_gl_detail_pdf(
@@ -436,93 +432,6 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         self.assertEqual(reconciliation.details["account_mismatch_count"], "2")
         self.assertTrue(reconciliation_failed(reconciliation))
 
-    def test_parse_spd640_synthetic_report(self) -> None:
-        root = Path(__file__).resolve().parents[1]
-        report = parse_spd640_csv(root / "samples" / "OPD_RP_00001234_SPD640-P_SYNTHETIQUE.CSV")
-        totals = report.to_payroll_totals()
-
-        self.assertEqual(report.row_count, SPD640_ROW_COUNT)
-        self.assertEqual(report.batch, "00001234")
-        self.assertEqual(report.period, "202606")
-        self.assertEqual(totals.other_totals["type_g_montants"], SPD640_TYPE_G_MONTANTS)
-        self.assertEqual(totals.other_totals["type_d_montants"], SPD640_TYPE_D_MONTANTS)
-
-    def test_each_synthetic_txt_has_matching_spd640_csv(self) -> None:
-        root = Path(__file__).resolve().parents[1]
-        config = self.config()
-        samples = root / "samples"
-        pairs = (
-            (
-                "employeurd-balanced.txt",
-                "OPD_RP_00001234_SPD640-P_EMPLOYEURD-BALANCED_SYNTHETIQUE.CSV",
-                True,
-            ),
-            (
-                "employeurd-unbalanced.txt",
-                "OPD_RP_00001234_SPD640-P_EMPLOYEURD-UNBALANCED_SYNTHETIQUE.CSV",
-                False,
-            ),
-            (
-                "employeurd-unknown-account.txt",
-                "OPD_RP_00001234_SPD640-P_EMPLOYEURD-UNKNOWN-ACCOUNT_SYNTHETIQUE.CSV",
-                True,
-            ),
-            (
-                "employeurd-zero-amount.txt",
-                "OPD_RP_00001234_SPD640-P_EMPLOYEURD-ZERO-AMOUNT_SYNTHETIQUE.CSV",
-                True,
-            ),
-        )
-
-        for source_name, report_name, should_match in pairs:
-            with self.subTest(source=source_name, report=report_name):
-                source_path = samples / source_name
-                report_path = samples / report_name
-                source_lines = source_path.read_text(encoding="ascii").splitlines()
-                self.assertEqual({len(line) for line in source_lines}, {77})
-
-                entries = parse_employeurd_file(source_path)
-                report = parse_spd640_csv(report_path)
-                self.assertEqual(report.batch, "00001234")
-                self.assertEqual(report.period, "202606")
-                self.assertGreater(report.row_count, 0)
-                reconciliation = reconcile_spd640(entries, report_path, config, required=True)
-
-                self.assertEqual(reconciliation.status == "success", should_match)
-
-    def test_reconcile_spd640_with_source_totals(self) -> None:
-        root = Path(__file__).resolve().parents[1]
-        config = self.config()
-        source_entries = parse_employeurd_file(root / "samples" / "employeurd-balanced.txt")
-        source_debit, source_credit = source_totals(source_entries)
-        report = parse_spd640_csv(root / "samples" / "OPD_RP_00001234_SPD640-P_SYNTHETIQUE.CSV")
-
-        result = reconcile_spd640_with_source_totals(
-            report,
-            source_debit=source_debit,
-            source_credit=source_credit,
-            config=config.reports.spd640,
-        )
-
-        self.assertTrue(result.ok)
-        self.assertEqual(result.report_debit, BALANCED_TOTAL)
-        self.assertEqual(result.report_credit, BALANCED_TOTAL)
-
-    def test_reconcile_spd640_detects_difference(self) -> None:
-        root = Path(__file__).resolve().parents[1]
-        config = self.config()
-        report = parse_spd640_csv(root / "samples" / "OPD_RP_00001234_SPD640-P_SYNTHETIQUE.CSV")
-
-        result = reconcile_spd640_with_source_totals(
-            report,
-            source_debit=Decimal("10.00"),
-            source_credit=Decimal("10.00"),
-            config=config.reports.spd640,
-        )
-
-        self.assertFalse(result.ok)
-        self.assertEqual(result.debit_difference, Decimal("-6633.00"))
-
     def test_control_report_accepts_gl_detail_pdf(self) -> None:
         root = Path(__file__).resolve().parents[1]
         config = self.config()
@@ -546,53 +455,6 @@ class EmployeurDMegaGestTest(unittest.TestCase):
             with self.assertRaises(ValidationFailed):
                 reconcile_control_report(entries, report, config, required=False)
 
-    def test_spd640_formula_includes_employer_and_vacation_bank_only(self) -> None:
-        config = self.config()
-        with tempfile.TemporaryDirectory() as directory:
-            report_path = Path(directory) / "OPD_RP_00009999_SPD640-P_SYNTHETIQUE.CSV"
-            report_path.write_text(
-                "COMPAGNIE;DATE COMPTABLE;DIV. OU TRA#1;SERV. OU TRA#2;DEPT. OU TRA#3;S-DEPT. OU TRA#4;TRA#5;TRA#6;RELEVES;DATE;MATRICULE;NOM, PRENOM;TYPE;CODE;DESCRIPTION CODE;QUANTITES;TAUX;MONTANTS;MNTS/EMPLOYEUR;QUANTITES BANQUE;MNTS BANQUE\n"
-                "1;2026-06-18;;130;131;;;;;;1;TEST, ALPHA;G;1;HRES REGULIERES;0.00;0.00;1000.00;0.00;0.00;0.00\n"
-                "1;2026-06-18;;130;131;;;;;;1;TEST, ALPHA;D;6;FSS;0.00;0.00;0.00;200.00;0.00;0.00\n"
-                "1;2026-06-18;;130;131;;;;;;1;TEST, ALPHA;G;305;BQ. VACANCES $;0.00;0.00;0.00;0.00;0.00;50.50\n"
-                "1;2026-06-18;;130;131;;;;;;1;TEST, ALPHA;G;113;BQ HRES PAYEES;0.00;0.00;0.00;0.00;0.00;999.99\n",
-                encoding="utf-8",
-            )
-            report = parse_spd640_csv(report_path)
-
-        result = reconcile_spd640_with_source_totals(
-            report,
-            source_debit=Decimal("1250.50"),
-            source_credit=Decimal("1250.50"),
-            config=config.reports.spd640,
-        )
-
-        self.assertTrue(result.ok)
-        self.assertEqual(result.report_debit, Decimal("1250.50"))
-
-    def test_conversion_artifacts_include_spd640_reconciliation(self) -> None:
-        root = Path(__file__).resolve().parents[1]
-        config = self.config()
-        source = root / "samples" / "employeurd-balanced.txt"
-        spd = root / "samples" / "OPD_RP_00001234_SPD640-P_SYNTHETIQUE.CSV"
-        entries = parse_employeurd_file(source)
-        reconciliation = reconcile_spd640(entries, spd, config, required=True)
-
-        with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "output.mnd"
-            conversion = convert_file(source, output, config, reconciliations=[reconciliation])
-            payload = json.loads(output.with_suffix(".validation.json").read_text(encoding="utf-8"))
-            markdown = output.with_suffix(".rapport.md").read_text(encoding="utf-8")
-
-            spd640_payload = next(item for item in payload["reconciliations"] if item["report_type"] == "SPD640")
-            summary = summary_text(conversion, [reconciliation])
-
-            self.assertEqual(spd640_payload["status"], "success")
-            self.assertIn("SPD640-P: Concordant - totaux comparés débit 6 643,00 $ / crédit 6 643,00 $", summary)
-            self.assertIn("Écart SPD640-P: débit 0,00 $ / crédit 0,00 $", summary)
-            self.assertIn("## Rapprochements", markdown)
-            self.assertIn("SPD640", markdown)
-
     def test_conversion_artifacts_include_gl_detail_reconciliation(self) -> None:
         root = Path(__file__).resolve().parents[1]
         config = self.config()
@@ -615,26 +477,6 @@ class EmployeurDMegaGestTest(unittest.TestCase):
             self.assertIn("Rapport GL: Concordant - totaux comparés débit 6 643,00 $ / crédit 6 643,00 $", summary)
             self.assertIn("Comptes GL en écart: 0", summary)
             self.assertIn("GL_DETAIL", markdown)
-
-    def test_required_spd640_batch_mismatch_blocks_and_writes_failure_artifacts(self) -> None:
-        root = Path(__file__).resolve().parents[1]
-        config = self.config()
-        source = root / "samples" / "employeurd-balanced.txt"
-        source_entries = parse_employeurd_file(source)
-        source_spd = root / "samples" / "OPD_RP_00001234_SPD640-P_SYNTHETIQUE.CSV"
-        with tempfile.TemporaryDirectory() as directory:
-            bad_spd = Path(directory) / "OPD_RP_99999999_SPD640-P_SYNTHETIQUE.CSV"
-            bad_spd.write_text(source_spd.read_text(encoding="utf-8"), encoding="utf-8")
-            reconciliation = reconcile_spd640(source_entries, bad_spd, config, required=True)
-            output = Path(directory) / "output.mnd"
-            with self.assertRaises(ValidationFailed):
-                convert_file(source, output, config, reconciliations=[reconciliation])
-            payload = json.loads(output.with_suffix(".validation.json").read_text(encoding="utf-8"))
-
-        self.assertTrue(reconciliation_failed(reconciliation))
-        self.assertFalse(output.exists())
-        self.assertEqual(payload["status"], "failed")
-        self.assertEqual(payload["reconciliations"][0]["status"], "failed")
 
     def test_output_plan_uses_unique_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1039,20 +881,20 @@ class EmployeurDMegaGestTest(unittest.TestCase):
         with self.assertRaises(ValidationFailed):
             controller.validate(
                 source_path=root / "samples" / "employeurd-balanced.txt",
-                spd640_path=None,
-                require_spd640=True,
+                control_report_path=None,
+                require_control_report=True,
             )
 
     def test_gui_view_state_blocks_generation_until_validation_success(self) -> None:
         root = Path(__file__).resolve().parents[1]
         source = root / "samples" / "employeurd-balanced.txt"
         with tempfile.TemporaryDirectory() as directory:
-            state = GuiViewState(input_file_path=source, spd640_path=None, output_dir=Path(directory))
+            state = GuiViewState(input_file_path=source, control_report_path=None, output_dir=Path(directory))
             self.assertTrue(state.can_validate)
             self.assertFalse(state.can_generate)
 
             result = convert_file(source, Path(directory) / "preview.mnd", self.config())
-            state = GuiViewState(input_file_path=source, spd640_path=None, output_dir=Path(directory), validation_result=result)
+            state = GuiViewState(input_file_path=source, control_report_path=None, output_dir=Path(directory), validation_result=result)
 
         self.assertTrue(state.can_generate)
         metrics = build_metrics(result)

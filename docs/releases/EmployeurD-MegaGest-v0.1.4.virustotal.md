@@ -16,4 +16,4 @@
 - timeout : 5
 - failure : 1
 
-Ne jamais soumettre de fichiers TXT EmployeurD, SPD, MND, Markdown ou JSON de validation.
+Ne jamais soumettre de fichiers TXT EmployeurD, rapports de contrôle, MND, Markdown ou JSON de validation.

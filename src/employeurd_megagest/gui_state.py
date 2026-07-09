@@ -40,12 +40,12 @@ class ResultMetric:
 @dataclass(frozen=True)
 class GuiViewState:
     input_file_path: Path | None
-    spd640_path: Path | None
+    control_report_path: Path | None
     output_dir: Path | None
     validation_result: ConversionResult | None = None
     last_generated_files: tuple[Path, ...] = ()
     update_status: str = "Non vérifiée"
-    strict_spd640_enabled: bool = False
+    strict_control_report_enabled: bool = False
     busy: bool = False
     errors: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
@@ -242,17 +242,6 @@ def _reconciliation_metrics(reconciliation: ReconciliationResult) -> list[Result
         if mismatch_count is not None:
             metrics.append(ResultMetric("Comptes GL en écart", mismatch_count))
         return metrics
-    if reconciliation.report_type == "SPD640":
-        return [
-            ResultMetric(
-                "SPD640-P",
-                f"{status.capitalize()} - totaux comparés débit {_format_money(reconciliation.report_debit)} / crédit {_format_money(reconciliation.report_credit)}",
-            ),
-            ResultMetric(
-                "Écart SPD640-P",
-                f"débit {_format_money(reconciliation.debit_difference)} / crédit {_format_money(reconciliation.credit_difference)}",
-            ),
-        ]
     return [
         ResultMetric(
             reconciliation.report_type,

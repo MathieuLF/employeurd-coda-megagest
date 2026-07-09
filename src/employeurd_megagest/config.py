@@ -39,33 +39,6 @@ class MndConfig:
 
 
 @dataclass(frozen=True)
-class ReportComponentConfig:
-    field: str
-    type: str | None = None
-    codes: tuple[str, ...] = ()
-    exclude_codes: tuple[str, ...] = ()
-    sign: int = 1
-
-
-@dataclass(frozen=True)
-class ReportTotalConfig:
-    label: str
-    components: tuple[ReportComponentConfig, ...]
-
-
-@dataclass(frozen=True)
-class SPD640Config:
-    enabled: bool = True
-    mode: str = "advisory"
-    tolerance: Decimal = Decimal("0.00")
-    require_matching_batch: bool = True
-    require_matching_period: bool = True
-    require_matching_date: bool = False
-    debit_total: ReportTotalConfig | None = None
-    credit_total: ReportTotalConfig | None = None
-
-
-@dataclass(frozen=True)
 class GLDetailConfig:
     enabled: bool = True
     mode: str = "advisory"
@@ -76,7 +49,6 @@ class GLDetailConfig:
 
 @dataclass(frozen=True)
 class ReportsConfig:
-    spd640: SPD640Config
     gl_detail: GLDetailConfig
 
 
@@ -144,23 +116,8 @@ def load_app_config(config_dir: Path) -> AppConfig:
 
 def _load_reports_config(data: dict[str, Any]) -> ReportsConfig:
     root = _as_dict(data.get("reports", {}), "reports")
-    spd640_root = _as_dict(root.get("spd640", {}), "reports.spd640")
     gl_detail_root = _as_dict(root.get("gl_detail", {}), "reports.gl_detail")
-    default_total = ReportTotalConfig(
-        label="TYPE=G / MONTANTS",
-        components=(ReportComponentConfig(type="G", field="MONTANTS"),),
-    )
     return ReportsConfig(
-        spd640=SPD640Config(
-            enabled=_as_bool(spd640_root.get("enabled", True)),
-            mode=str(spd640_root.get("mode", "advisory")),
-            tolerance=_as_decimal(spd640_root.get("tolerance", "0.00")),
-            require_matching_batch=_as_bool(spd640_root.get("require_matching_batch", True)),
-            require_matching_period=_as_bool(spd640_root.get("require_matching_period", True)),
-            require_matching_date=_as_bool(spd640_root.get("require_matching_date", False)),
-            debit_total=_load_report_total(spd640_root.get("debit_total"), default_total, "debit_total"),
-            credit_total=_load_report_total(spd640_root.get("credit_total"), default_total, "credit_total"),
-        ),
         gl_detail=GLDetailConfig(
             enabled=_as_bool(gl_detail_root.get("enabled", True)),
             mode=str(gl_detail_root.get("mode", "advisory")),
@@ -168,36 +125,6 @@ def _load_reports_config(data: dict[str, Any]) -> ReportsConfig:
             require_matching_date=_as_bool(gl_detail_root.get("require_matching_date", True)),
             require_account_totals=_as_bool(gl_detail_root.get("require_account_totals", True)),
         ),
-    )
-
-
-def _load_report_total(value: Any, default: ReportTotalConfig, name: str) -> ReportTotalConfig:
-    if value is None:
-        return default
-    data = _as_dict(value, name)
-    components_raw = data.get("components")
-    if not isinstance(components_raw, list) or not components_raw:
-        raise ConfigurationError(f"{name}.components doit être une liste non vide.")
-    return ReportTotalConfig(
-        label=str(data.get("label", name)),
-        components=tuple(_load_report_component(component, f"{name}.components") for component in components_raw),
-    )
-
-
-def _load_report_component(value: Any, name: str) -> ReportComponentConfig:
-    data = _as_dict(value, name)
-    field = str(data.get("field", "")).strip()
-    if field not in {"MONTANTS", "MNTS/EMPLOYEUR", "MNTS BANQUE"}:
-        raise ConfigurationError(f"Champ SPD640 invalide: {field}")
-    sign = int(str(data.get("sign", "1")))
-    if sign not in {-1, 1}:
-        raise ConfigurationError("Le signe d'un composant doit être 1 ou -1.")
-    return ReportComponentConfig(
-        field=field,
-        type=str(data["type"]).strip() if data.get("type") is not None else None,
-        codes=tuple(str(code).strip() for code in data.get("codes", []) or ()),
-        exclude_codes=tuple(str(code).strip() for code in data.get("exclude_codes", []) or ()),
-        sign=sign,
     )
 
 

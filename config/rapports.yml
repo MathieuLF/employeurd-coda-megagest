@@ -5,39 +5,3 @@ reports:
     tolerance: "0.00"
     require_matching_date: true
     require_account_totals: true
-
-  spd640:
-    enabled: true
-    mode: "advisory"
-    tolerance: "0.00"
-    require_matching_batch: true
-    require_matching_period: true
-    require_matching_date: false
-    debit_total:
-      label: "TYPE=G/MONTANTS + TYPE=D/MNTS/EMPLOYEUR + G code 305/MNTS BANQUE"
-      components:
-        - type: "G"
-          field: "MONTANTS"
-          sign: 1
-        - type: "D"
-          field: "MNTS/EMPLOYEUR"
-          sign: 1
-        - type: "G"
-          field: "MNTS BANQUE"
-          codes:
-            - "305"
-          sign: 1
-    credit_total:
-      label: "TYPE=G/MONTANTS + TYPE=D/MNTS/EMPLOYEUR + G code 305/MNTS BANQUE"
-      components:
-        - type: "G"
-          field: "MONTANTS"
-          sign: 1
-        - type: "D"
-          field: "MNTS/EMPLOYEUR"
-          sign: 1
-        - type: "G"
-          field: "MNTS BANQUE"
-          codes:
-            - "305"
-          sign: 1
